@@ -1,0 +1,45 @@
+{
+  "name": "@jcodesmore/claude-search",
+  "version": "0.1.0",
+  "description": "Local ranked full-text search across Claude Code transcripts. Two-command install, zero config.",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "claude-search": "./scripts/search.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "search": "node ./scripts/search.mjs",
+    "index": "node ./scripts/index-delta.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:watch": "node --test --watch test/*.test.mjs",
+    "build-fixtures": "node test/fixtures/build.mjs"
+  },
+  "files": [
+    ".claude-plugin",
+    "skills",
+    "hooks",
+    "scripts",
+    "src",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "homepage": "https://github.com/JCodesMore/claude-search",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JCodesMore/claude-search.git"
+  },
+  "keywords": [
+    "claude-code",
+    "search",
+    "transcripts",
+    "sessions",
+    "history",
+    "local",
+    "plugin"
+  ],
+  "license": "Apache-2.0"
+}

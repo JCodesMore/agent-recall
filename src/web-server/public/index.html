@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>claude-search</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>claude-search</h1>
+    <p class="muted">Local search across your Claude Code sessions. Nothing leaves this machine.</p>
+  </header>
+
+  <form id="search-form" autocomplete="off">
+    <input
+      id="q"
+      type="search"
+      name="q"
+      placeholder="Search your transcripts…"
+      autofocus
+      spellcheck="false"
+    >
+    <input
+      id="project"
+      type="search"
+      name="project"
+      placeholder="Project filter (optional)"
+      spellcheck="false"
+    >
+    <button type="submit">Search</button>
+  </form>
+
+  <div id="status" class="muted" role="status" aria-live="polite"></div>
+  <ol id="results"></ol>
+
+  <footer>
+    <p class="muted">
+      Run <code>claude --resume &lt;id&gt;</code> in any project to pick a session back up.
+    </p>
+  </footer>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

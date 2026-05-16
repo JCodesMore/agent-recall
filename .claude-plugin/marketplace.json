@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-marketplace.json",
+  "name": "claude-search",
+  "owner": {
+    "name": "JCodesMore",
+    "url": "https://github.com/JCodesMore"
+  },
+  "metadata": {
+    "description": "Local search across your Claude Code conversation history",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "claude-search",
+      "source": ".",
+      "description": "Search your past Claude Code conversations — ranked results, resumable in one command",
+      "version": "0.1.0",
+      "strict": true
+    }
+  ]
+}
