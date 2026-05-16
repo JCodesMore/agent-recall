@@ -5,8 +5,8 @@
 Claude Code stores transcripts under `~/.claude/projects/<sanitized-cwd>/`:
 
 - Project dir naming: cwd with `\` → `-`, `:` → empty, `/` → `-`. Example:
-  - cwd `C:\Users\jmd50\Documents\Main\Projects\Claude\claude-search`
-  - dir `C--Users-jmd50-Documents-Main-Projects-Claude-claude-search`
+  - cwd `C:\Users\you\Documents\Main\Projects\Claude\claude-search`
+  - dir `C--Users-you-Documents-Main-Projects-Claude-claude-search`
 - Top-level files: `<sessionId>.jsonl` — the main transcript (newer projects)
 - Subdir per session: `<sessionId>/subagents/agent-*.jsonl` — sub-agent traces
 - Older projects may have `<sessionId>/` dirs with only `subagents/` (no main jsonl)
