@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { buildDelta } from '../src/indexer/delta.mjs';
 import { readIndex } from '../src/indexer/inverted.mjs';
 import { readManifest } from '../src/indexer/manifest.mjs';
+import { INDEX_FILES } from '../src/config.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(HERE, 'fixtures', 'projects');
@@ -30,10 +31,14 @@ test('first build indexes all transcript files', async () => {
   assert.ok(stats.docs > 0);
 });
 
-test('second build skips unchanged files', async () => {
+test('second build skips unchanged files and does not rewrite docs.ndjson', async () => {
+  const docsFile = path.join(TMP, INDEX_FILES.DOCS);
+  const beforeStat = await fs.stat(docsFile);
   const stats = await buildDelta({ root: FIXTURES });
   assert.equal(stats.indexed, 0, 'no files changed, none should be re-indexed');
   assert.ok(stats.skipped >= 4);
+  const afterStat = await fs.stat(docsFile);
+  assert.equal(afterStat.mtimeMs, beforeStat.mtimeMs, 'docs.ndjson must not be rewritten on a no-op pass');
 });
 
 test('index contains expected sessions and postings', async () => {

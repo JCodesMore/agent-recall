@@ -95,6 +95,18 @@ export async function buildDelta({ root, force = false } = {}) {
         if (prevSession) reuseSessions.set(f.sessionId, prevSession);
       }
     }
+    const manifestFileCount = Object.keys(manifest.files).length;
+    const allCurrentUnchanged = reuseFiles.length === currentFiles.length;
+    const noFilesRemoved = manifestFileCount === currentFiles.length;
+    if (allCurrentUnchanged && noFilesRemoved && prevIndex.docs.length > 0) {
+      return {
+        indexed: 0,
+        skipped: currentFiles.length,
+        removed: 0,
+        docs: prevIndex.docs.length,
+        sessions: Object.keys(prevIndex.sessions).length,
+      };
+    }
     if (reuseFiles.length > 0) {
       const oldTexts = await readAllDocs();
       for (const f of reuseFiles) {

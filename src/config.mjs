@@ -83,6 +83,8 @@ export const TOKENIZE = Object.freeze({
 
 export const INDEXER = Object.freeze({
   MAX_TEXT_PER_RECORD: 200_000,
+  TIMEOUT_MS: 60_000,
+  LOCK_STALE_AFTER_MS: 90_000,
 });
 
 export const EXIT_CODES = Object.freeze({
