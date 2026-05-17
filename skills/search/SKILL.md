@@ -22,7 +22,9 @@ The CLI prints ranked results with:
 - A highlighted snippet
 - A `claude --resume <id>` command to resume that session
 
-Forward the CLI output to the user as-is. Do not summarize — the styled output is the product.
+**Paste the CLI output into the chat reply, verbatim, inside a fenced code block.** Raw shell output is hidden from the user — only Claude's text response shows. Without echoing the output, the ranked list, snippets, and resume commands are invisible. ANSI color codes are auto-stripped when the CLI runs under the bash tool, so the captured stdout is already clean text.
+
+A short one-line lead-in before the code block is fine (e.g. "Top results for `<query>`:"). After the code block, a brief 1–3 line summary that groups or highlights notable matches is welcome — but never replace the echoed results with a summary alone.
 
 ## When the user wants to browse in a web UI
 
@@ -32,7 +34,7 @@ If the user asks to "open", "browse", "show me a UI", or otherwise wants a visua
 node "${CLAUDE_PLUGIN_ROOT}/scripts/search.mjs" --web $ARGUMENTS
 ```
 
-This starts a local server on `127.0.0.1:<port>` and prints the URL. Tell the user to open that URL in their browser. The server keeps running until they stop it with Ctrl+C.
+This starts a local server on `127.0.0.1:<port>` and prints the URL. Echo the URL in the chat reply and tell the user to open it in their browser. The server keeps running until they stop it with Ctrl+C.
 
 ## When the user gives no query
 

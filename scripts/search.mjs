@@ -73,18 +73,20 @@ async function main() {
     process.exit(EXIT_CODES.USAGE);
   }
 
+  const colorEnabled = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
+
   const t0 = Date.now();
   const results = await search(query, {
     limit: args.limit,
     project: args.project,
-    format: args.json ? 'plain' : 'ansi',
+    format: (args.json || !colorEnabled) ? 'plain' : 'ansi',
   });
   const elapsedMs = Date.now() - t0;
 
   if (args.json) {
     process.stdout.write(formatJson(results, { query, elapsedMs }) + '\n');
   } else {
-    process.stdout.write(formatResults(results, { query, elapsedMs }) + '\n');
+    process.stdout.write(formatResults(results, { query, elapsedMs, color: colorEnabled }) + '\n');
   }
 }
 
