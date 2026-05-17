@@ -73,6 +73,12 @@ export const WEB = Object.freeze({
   PORT_MIN: 7345,
   PORT_MAX: 7395,
   API_PATH: '/api/search',
+  API_OPEN_FOLDER: '/api/actions/open-folder',
+  API_RESUME: '/api/actions/resume',
+});
+
+export const VALIDATION = Object.freeze({
+  SESSION_ID_REGEX: /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i,
 });
 
 export const TOKENIZE = Object.freeze({
