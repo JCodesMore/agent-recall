@@ -7,14 +7,14 @@
   },
   "metadata": {
     "description": "Local search across your Claude Code conversation history",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "claude-search",
       "source": ".",
       "description": "Search your past Claude Code conversations — ranked results, resumable in one command",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "strict": true
     }
   ]

@@ -1,6 +1,6 @@
 {
   "name": "@jcodesmore/claude-search",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local ranked full-text search across Claude Code transcripts. Two-command install, zero config.",
   "type": "module",
   "private": true,
