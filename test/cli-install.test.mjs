@@ -330,6 +330,10 @@ test('canonical skill remains model-invoked and plugin wrapper points to it', as
   const canonical = await fs.readFile(path.join(ROOT, 'SKILL.md'), 'utf8');
   const wrapper = await fs.readFile(path.join(ROOT, 'skills', 'agent-recall', 'SKILL.md'), 'utf8');
   assert.match(canonical, /description: Use Agent Recall to find prior coding-agent conversations/);
+  assert.match(canonical, /argument-hint: <query>/);
+  assert.match(canonical, /user-invocable: true/);
   assert.doesNotMatch(canonical, /disable-model-invocation/);
+  assert.match(wrapper, /argument-hint: <query>/);
+  assert.match(wrapper, /user-invocable: true/);
   assert.match(wrapper, /\$\{CLAUDE_PLUGIN_ROOT\}\/SKILL\.md/);
 });

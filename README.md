@@ -39,18 +39,28 @@ node scripts/install.mjs --agents-only
 
 Restart Codex or OpenCode if it was already running.
 
-**That's it.** Open a new chat and ask your agent about something from an older conversation. The first search builds a private local index; later searches refresh only what changed.
+**That's it.** Invoke Agent Recall directly, followed by your query:
+
+| Agent | Invocation |
+|---|---|
+| Claude Code plugin | `/agent-recall:agent-recall <query>` |
+| Claude Code standalone skill | `/agent-recall <query>` |
+| Codex | `$agent-recall <query>` |
+| OpenCode | `Use the agent-recall skill: <query>` |
+
+The first search builds a private local index; later searches refresh only what changed.
 
 ## Try it
 
-Ask the way you would ask a teammate who was there:
+Replace `<query>` with something like:
 
+- *"What did we do in the past 24 hours?"*
 - *"Where did we fix that Postgres connection issue?"*
 - *"What did we decide about the new auth flow?"*
-- *"Find the conversation where I compared those proxy APIs."*
-- *"Catch me up on what I was doing in this project yesterday."*
-- *"I discussed this in Codex last week. Can you find it?"*
-- *"Show me the screenshot I shared when we debugged the checkout page."*
+- *"Find where I compared those proxy APIs and summarize the result."*
+- *"Catch me up on this project from yesterday."*
+- *"What did I discuss in Codex about this feature last week?"*
+- *"Find where we debugged the checkout page and show me the screenshot I shared."*
 
 You do not need to remember which agent you used, what the chat was called, or where the session file lives. Just describe what you remember.
 
