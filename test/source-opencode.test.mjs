@@ -134,6 +134,7 @@ test('read reconstructs sessions and searchable messages without reading sensiti
   assert.equal(result.messages.length, 4);
   assert.deepEqual(result.diagnostics, { malformed: 0, truncated: 1, skipped: 0 });
   assert.equal(result.attachments.length, 1);
+  assert.equal(result.attachments[0].metadata.name, 'fixture.png');
   assert.deepEqual(opencodeAdapter.readAttachment(result.attachments[0]).data, Buffer.from(PNG_DATA, 'base64'));
 
   const parent = result.sessions.find(session => session.nativeId === 'ses-parent');

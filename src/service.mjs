@@ -1,4 +1,5 @@
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { APP, LIMITS, TOKENIZE } from './config.mjs';
 import { classifyActivity, latestActivityEvent } from './activity.mjs';
 import { displayPath } from './paths.mjs';
@@ -53,18 +54,21 @@ function parseJson(value, fallback) {
 }
 
 function compactAttachment(row) {
+  const metadata = parseJson(row.metadata_json, {});
   return {
     attachmentKey: row.attachment_key,
     ordinal: Number(row.ordinal),
     kind: row.kind,
+    provider: row.provider,
     mime: row.mime,
     byteLength: Number(row.byte_length),
+    name: metadata.name || undefined,
   };
 }
 
 function attachmentsForMessage(db, messageKey) {
   return db.prepare(`
-    SELECT attachment_key, ordinal, kind, mime, byte_length
+    SELECT attachment_key, ordinal, kind, mime, byte_length, provider, metadata_json
     FROM attachments WHERE message_key = ? ORDER BY ordinal
   `).all(messageKey).map(compactAttachment);
 }
@@ -393,24 +397,49 @@ export async function getAttachmentData(attachmentKey, options = {}) {
     }
     if (options.cwd) addCwdCondition(conditions, params, 's.cwd', options.cwd);
     const row = db.prepare(`
-      SELECT a.* FROM attachments a JOIN sessions s USING(session_key)
+      SELECT a.*
+      FROM attachments a
+      JOIN messages m ON m.message_key = a.message_key AND m.session_key = a.session_key
+      JOIN sessions s ON s.session_key = m.session_key
+        AND s.provider = a.provider AND s.source_path = a.source_path
+      JOIN sources src ON src.source_path = s.source_path AND src.provider = s.provider
       WHERE ${conditions.join(' AND ')}
     `).get(...params);
     if (!row) return null;
+    const stale = () => {
+      const error = new Error('The attachment source changed. Run agent-recall sync and retry with the new attachment key.');
+      error.code = 'STALE_ATTACHMENT';
+      throw error;
+    };
+    if (!row.sha256 || Number(row.byte_length) > LIMITS.ATTACHMENT_MAX_BYTES) stale();
     const adapter = adapterFor(row.provider);
     if (!adapter?.readAttachment) throw new Error(`Attachment retrieval is unavailable for provider: ${row.provider}`);
-    const result = await adapter.readAttachment({
-      sourcePath: row.source_path,
-      locator: parseJson(row.locator_json, {}),
-      mime: row.mime,
-    });
-    if (!result) return null;
+    let result;
+    try {
+      result = await adapter.readAttachment({
+        sourcePath: row.source_path,
+        locator: parseJson(row.locator_json, {}),
+        mime: row.mime,
+      });
+    } catch (error) {
+      if (error?.code === 'INVALID_ATTACHMENT_DATA') stale();
+      throw error;
+    }
+    if (!result || !Buffer.isBuffer(result.data)) stale();
+    const digest = crypto.createHash('sha256').update(result.data).digest('hex');
+    if (
+      result.data.length !== Number(row.byte_length)
+      || result.data.length > LIMITS.ATTACHMENT_MAX_BYTES
+      || String(result.mime).toLowerCase() !== String(row.mime).toLowerCase()
+      || digest !== row.sha256
+    ) stale();
     return {
       schemaVersion: APP.CLI_SCHEMA_VERSION,
       ...compactAttachment(row),
       messageKey: row.message_key,
       data: result.data,
       mime: result.mime || row.mime,
+      sourcePath: row.source_path,
     };
   } finally {
     if (ownsDb) db.close();

@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { LIMITS, PATHS, PROVIDERS } from '../config.mjs';
-import { attachmentKey, parseDataUrl } from '../model/attachments.mjs';
+import { attachmentKey, decodeDataUrl, parseDataUrl } from '../model/attachments.mjs';
 import { asIso, messageKey, sessionKey, stableId } from '../model/ids.mjs';
 import { emptyDiagnostics, readJsonlRecordAt, readJsonlRecords, sourceSignature } from './source-adapter.mjs';
 
@@ -69,7 +69,7 @@ function contentImages(content) {
     const mime = String(block.source.media_type || 'application/octet-stream').toLowerCase();
     const parsed = parseDataUrl(`data:${mime};base64,${block.source.data || ''}`);
     if (!parsed) return [];
-    return [{ blockIndex, mime: parsed.mime, byteLength: parsed.byteLength }];
+    return [{ blockIndex, mime: parsed.mime, byteLength: parsed.byteLength, sha256: parsed.sha256 }];
   });
 }
 
@@ -191,8 +191,8 @@ export const claudeAdapter = {
       }
 
       const images = contentImages(record.message?.content);
-      const text = contentText(record.message?.content) || (images.length ? '[Image attachment]' : '');
-      if (!text) {
+      const text = contentText(record.message?.content);
+      if (!text && images.length === 0) {
         diagnostics.skipped += 1;
         continue;
       }
@@ -213,7 +213,7 @@ export const claudeAdapter = {
         sequence,
         timestamp,
         role,
-        contentType: images.length && text === '[Image attachment]' ? 'attachment' : 'text',
+        contentType: images.length && !text ? 'attachment' : 'text',
         text: truncate(text, diagnostics),
         sourcePath,
         sourceLocator: `line:${line}`,
@@ -225,18 +225,25 @@ export const claudeAdapter = {
         },
       });
       for (const [ordinal, image] of images.entries()) {
+        const duplicate = images.slice(0, ordinal).filter(candidate => candidate.sha256 === image.sha256).length;
+        const nativeAttachmentId = `${image.sha256}:${duplicate}`;
         attachments.push({
-          attachmentKey: attachmentKey(PROVIDERS.CLAUDE, messageNativeId, sourcePath, ordinal),
+          attachmentKey: attachmentKey(PROVIDERS.CLAUDE, messageNativeId, sourcePath, nativeAttachmentId),
           messageKey: ownMessageKey,
           sessionKey: ownSessionKey,
           provider: PROVIDERS.CLAUDE,
-          nativeId: `${messageNativeId}:${ordinal}`,
+          nativeId: nativeAttachmentId,
           ordinal,
           kind: 'image',
           mime: image.mime,
           byteLength: image.byteLength,
+          sha256: image.sha256,
           sourcePath,
-          locator: { line, blockIndex: image.blockIndex },
+          locator: {
+            line,
+            blockIndex: image.blockIndex,
+            messageId: record.uuid ?? record.message?.id ?? null,
+          },
           metadata: {},
         });
       }
@@ -283,11 +290,11 @@ export const claudeAdapter = {
 
   async readAttachment(attachment) {
     const record = await readJsonlRecordAt(attachment.sourcePath, attachment.locator.line);
+    const messageId = record?.uuid ?? record?.message?.id ?? null;
+    if (attachment.locator.messageId && String(messageId) !== String(attachment.locator.messageId)) return null;
     const block = record?.message?.content?.[attachment.locator.blockIndex];
     if (block?.type !== 'image' || block.source?.type !== 'base64') return null;
-    return {
-      mime: String(block.source.media_type || attachment.mime).toLowerCase(),
-      data: Buffer.from(block.source.data, 'base64'),
-    };
+    const mime = String(block.source.media_type || attachment.mime).toLowerCase();
+    return decodeDataUrl(`data:${mime};base64,${block.source.data || ''}`);
   },
 };

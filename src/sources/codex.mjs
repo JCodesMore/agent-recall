@@ -58,7 +58,7 @@ function responseImages(content, role) {
     if (block?.type !== 'input_image') return [];
     const parsed = parseDataUrl(block.image_url);
     if (!parsed) return [];
-    return [{ blockIndex, mime: parsed.mime, byteLength: parsed.byteLength }];
+    return [{ blockIndex, mime: parsed.mime, byteLength: parsed.byteLength, sha256: parsed.sha256 }];
   });
 }
 
@@ -132,7 +132,7 @@ function makeMessage(candidate, nativeSessionId, sourcePath, sequence, diagnosti
     sequence,
     timestamp: candidate.timestamp,
     role: candidate.role,
-    contentType: candidate.images?.length && candidate.text === '[Image attachment]' ? 'attachment' : 'text',
+    contentType: candidate.images?.length && !candidate.text ? 'attachment' : 'text',
     text: truncate(candidate.text, diagnostics),
     sourcePath,
     sourceLocator: `line:${candidate.line}`,
@@ -232,7 +232,7 @@ export const codexAdapter = {
         responseCandidates.push({
           line,
           role: payload.role,
-          text: text || '[Image attachment]',
+          text,
           images,
           timestamp,
           model: candidateModel,
@@ -285,18 +285,25 @@ export const codexAdapter = {
       const nativeMessageId = candidateNativeId(candidate, sourcePath);
       const ownMessageKey = messageKey(PROVIDERS.CODEX, nativeMessageId, sourcePath, sequence);
       for (const [ordinal, image] of (candidate.images || []).entries()) {
+        const duplicate = candidate.images.slice(0, ordinal).filter(item => item.sha256 === image.sha256).length;
+        const nativeAttachmentId = `${image.sha256}:${duplicate}`;
         attachments.push({
-          attachmentKey: attachmentKey(PROVIDERS.CODEX, nativeMessageId, sourcePath, ordinal),
+          attachmentKey: attachmentKey(PROVIDERS.CODEX, nativeMessageId, sourcePath, nativeAttachmentId),
           messageKey: ownMessageKey,
           sessionKey: sessionKey(PROVIDERS.CODEX, nativeId, sourcePath),
           provider: PROVIDERS.CODEX,
-          nativeId: `${nativeMessageId}:${ordinal}`,
+          nativeId: nativeAttachmentId,
           ordinal,
           kind: 'image',
           mime: image.mime,
           byteLength: image.byteLength,
+          sha256: image.sha256,
           sourcePath,
-          locator: { line: candidate.line, blockIndex: image.blockIndex },
+          locator: {
+            line: candidate.line,
+            blockIndex: image.blockIndex,
+            messageId: candidate.nativeId ?? null,
+          },
           metadata: {},
         });
       }
@@ -341,6 +348,8 @@ export const codexAdapter = {
 
   async readAttachment(attachment) {
     const record = await readJsonlRecordAt(attachment.sourcePath, attachment.locator.line);
+    const messageId = record?.payload?.id ?? record?.id ?? null;
+    if (attachment.locator.messageId && String(messageId) !== String(attachment.locator.messageId)) return null;
     const block = record?.payload?.content?.[attachment.locator.blockIndex];
     if (block?.type !== 'input_image') return null;
     return decodeDataUrl(block.image_url);

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { after, before, test } from 'node:test';
 
 import { LIMITS } from '../src/config.mjs';
+import { parseDataUrl } from '../src/model/attachments.mjs';
 import { claudeAdapter } from '../src/sources/claude.mjs';
 import { codexAdapter } from '../src/sources/codex.mjs';
 
@@ -161,4 +162,31 @@ test('discovery tolerates missing synthetic roots', async () => {
   const missing = path.join(temporaryRoot, 'does-not-exist');
   assert.deepEqual(await claudeAdapter.discover({ root: missing }), []);
   assert.deepEqual(await codexAdapter.discover({ root: missing, archiveRoot: `${missing}-archive` }), []);
+});
+
+test('attachment parsing is strict and content-bound keys survive earlier insertions', async () => {
+  assert.equal(parseDataUrl('data:application/octet-stream;base64,').byteLength, 0);
+  assert.equal(parseDataUrl('data:image/png;charset=utf-8;base64,QUJDRA==').mime, 'image/png');
+  assert.equal(parseDataUrl('data:image/png;base64,A==='), null);
+  assert.equal(parseDataUrl('data:image/png,QUJDRA=='), null);
+  const oversized = 'A'.repeat(Math.ceil(LIMITS.ATTACHMENT_MAX_BYTES / 3) * 4 + 4);
+  assert.equal(parseDataUrl(`data:application/octet-stream;base64,${oversized}`), null);
+
+  const source = path.join(temporaryRoot, 'stable-attachment.jsonl');
+  const record = images => ({
+    type: 'user', uuid: 'stable-message', message: {
+      role: 'user',
+      content: images.map(data => ({ type: 'image', source: { type: 'base64', media_type: 'image/png', data } })),
+    },
+  });
+  await writeJsonl(source, [record([PNG_DATA])]);
+  const first = await claudeAdapter.read({ path: source, metadata: {} });
+  const original = first.attachments[0];
+  assert.equal(first.messages[0].text, '');
+
+  await writeJsonl(source, [record([Buffer.from('different').toString('base64'), PNG_DATA])]);
+  const second = await claudeAdapter.read({ path: source, metadata: {} });
+  const reindexed = second.attachments.find(attachment => attachment.sha256 === original.sha256);
+  assert.equal(reindexed.attachmentKey, original.attachmentKey);
+  assert.equal(reindexed.ordinal, 1);
 });

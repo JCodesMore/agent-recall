@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS attachments (
   kind TEXT NOT NULL,
   mime TEXT NOT NULL,
   byte_length INTEGER NOT NULL,
+  sha256 TEXT NOT NULL,
   source_path TEXT NOT NULL,
   locator_json TEXT NOT NULL,
   metadata_json TEXT NOT NULL DEFAULT '{}',
@@ -114,36 +115,44 @@ CREATE INDEX IF NOT EXISTS activity_session_time ON activity_events(provider, na
 
 export async function openDatabase({ file = databasePath(), readonly = false } = {}) {
   if (!readonly) await ensureDataHome();
-  if (!readonly && fs.existsSync(file)) {
-    const probe = new DatabaseSync(file, { readOnly: true });
-    let version;
-    try {
-      const hasMetadata = probe.prepare(`
-        SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'metadata'
-      `).get();
-      version = hasMetadata
-        ? probe.prepare('SELECT value FROM metadata WHERE key = ?').get('schema_version')?.value
-        : null;
-    } finally {
-      probe.close();
-    }
-    const numericVersion = Number(version);
-    if (Number.isFinite(numericVersion) && numericVersion > APP.DB_SCHEMA_VERSION) {
-      throw new Error(`Agent Recall database schema ${numericVersion} is newer than supported schema ${APP.DB_SCHEMA_VERSION}.`);
-    }
-    if (String(version ?? '') !== String(APP.DB_SCHEMA_VERSION)) {
-      for (const candidate of [file, `${file}-wal`, `${file}-shm`]) fs.rmSync(candidate, { force: true });
-    }
-  }
-  const db = new DatabaseSync(file, { readOnly: readonly });
+  let db = new DatabaseSync(file, { readOnly: readonly });
   db.exec(`PRAGMA busy_timeout=${DATABASE.BUSY_TIMEOUT_MS}; PRAGMA foreign_keys=ON;`);
   if (!readonly) {
+    const hasMetadata = db.prepare(`
+      SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'metadata'
+    `).get();
+    const version = hasMetadata
+      ? db.prepare('SELECT value FROM metadata WHERE key = ?').get('schema_version')?.value
+      : null;
+    const numericVersion = Number(version);
+    if (Number.isFinite(numericVersion) && numericVersion > APP.DB_SCHEMA_VERSION) {
+      db.close();
+      throw new Error(`Agent Recall database schema ${numericVersion} is newer than supported schema ${APP.DB_SCHEMA_VERSION}.`);
+    }
+    if (version !== null && version !== undefined && (!Number.isFinite(numericVersion) || numericVersion < 1)) {
+      db.close();
+      for (const candidate of [file, `${file}-wal`, `${file}-shm`]) fs.rmSync(candidate, { force: true });
+      db = new DatabaseSync(file);
+      db.exec(`PRAGMA busy_timeout=${DATABASE.BUSY_TIMEOUT_MS}; PRAGMA foreign_keys=ON;`);
+    }
     db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;');
-    db.exec(SCHEMA);
-    db.prepare('INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)').run(
-      'schema_version',
-      String(APP.DB_SCHEMA_VERSION),
-    );
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.exec(SCHEMA);
+      const attachmentColumns = db.prepare('PRAGMA table_info(attachments)').all();
+      if (!attachmentColumns.some(column => column.name === 'sha256')) {
+        db.exec("ALTER TABLE attachments ADD COLUMN sha256 TEXT NOT NULL DEFAULT ''");
+      }
+      db.prepare('INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)').run(
+        'schema_version',
+        String(APP.DB_SCHEMA_VERSION),
+      );
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      db.close();
+      throw error;
+    }
     if (process.platform !== 'win32' && fs.existsSync(file)) fs.chmodSync(file, 0o600);
   }
   return db;

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { APP, EXIT_CODES, LIMITS, PROVIDERS } from '../src/config.mjs';
-import { displayPath } from '../src/paths.mjs';
+import { databasePath, displayPath } from '../src/paths.mjs';
 
 const emitWarning = process.emitWarning.bind(process);
 process.emitWarning = (warning, ...args) => {
@@ -118,22 +119,85 @@ function terminalSafe(value) {
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '');
 }
 
+function textAttachments(attachments = []) {
+  if (!attachments.length) return '';
+  return attachments.map(attachment => (
+    `  attachment: ${attachment.attachmentKey} | ${attachment.name || attachment.kind} | ${attachment.mime} | ${attachment.byteLength} bytes`
+  )).join('\n');
+}
+
+function samePath(left, right) {
+  const normalize = value => process.platform === 'win32' ? value.toLowerCase() : value;
+  return normalize(path.resolve(left)) === normalize(path.resolve(right));
+}
+
+async function resolvedExistingPath(value) {
+  try {
+    return await fs.realpath(value);
+  } catch (error) {
+    if (error.code === 'ENOENT') return path.resolve(value);
+    throw error;
+  }
+}
+
+async function writeAttachmentOutput(requestedPath, data, protectedPaths) {
+  const requested = path.resolve(requestedPath);
+  await fs.mkdir(path.dirname(requested), { recursive: true, mode: 0o700 });
+  const parent = await fs.realpath(path.dirname(requested));
+  const output = path.join(parent, path.basename(requested));
+  for (const protectedPath of protectedPaths) {
+    if (protectedPath && samePath(output, await resolvedExistingPath(protectedPath))) {
+      throw new UsageError('Refusing to overwrite an Agent Recall database or authoritative provider source.');
+    }
+  }
+
+  const temporary = path.join(parent, `.${path.basename(output)}.${process.pid}.${randomUUID()}.tmp`);
+  let handle;
+  try {
+    handle = await fs.open(temporary, 'wx', 0o600);
+    await handle.writeFile(data);
+    await handle.sync();
+    await handle.close();
+    handle = null;
+    await fs.link(temporary, output);
+    return output;
+  } catch (error) {
+    if (error.code === 'EEXIST') throw new UsageError(`Output already exists: ${displayPath(output)}`);
+    throw error;
+  } finally {
+    if (handle) await handle.close().catch(() => {});
+    await fs.rm(temporary, { force: true }).catch(() => {});
+  }
+}
+
+function protectedAttachmentPaths(sourcePath) {
+  const recallDatabase = databasePath();
+  const paths = [sourcePath, recallDatabase, `${recallDatabase}-wal`, `${recallDatabase}-shm`];
+  if (path.extname(sourcePath).toLowerCase() === '.db') {
+    paths.push(`${sourcePath}-wal`, `${sourcePath}-shm`);
+  }
+  return paths;
+}
+
 function formatText(command, result) {
   if (command === 'search') {
     if (!result.hits.length) return `No conversation matches for "${result.query}".`;
     return result.hits.map((hit, index) => (
       `${index + 1}. ${textSession(hit.session)}\n` +
       `  hit: ${hit.hitId} | ${hit.role} | ${hit.occurredAt || 'unknown time'}\n` +
-      `  ${terminalSafe(hit.snippet).replaceAll('\n', '\n  ')}`
+      `  ${terminalSafe(hit.snippet).replaceAll('\n', '\n  ')}` +
+      `${hit.attachments?.length ? `\n${textAttachments(hit.attachments)}` : ''}`
     )).join('\n\n');
   }
   if (command === 'recent') return result.sessions.map(textSession).join('\n\n') || 'No indexed sessions.';
   if (command === 'context' || command === 'transcript') {
     return `${textSession(result.session)}\n\n${result.messages.map(message => (
-      `[${message.sequence}] ${message.role} ${message.timestamp || ''}${message.matched ? '  <match>' : ''}\n${terminalSafe(message.text)}`
+      `[${message.sequence}] ${message.role} ${message.timestamp || ''}${message.matched ? '  <match>' : ''}\n${terminalSafe(message.text)}` +
+      `${message.attachments?.length ? `\n${textAttachments(message.attachments)}` : ''}`
     )).join('\n\n')}`;
   }
-  if (command === 'session') return `${textSession(result)}\n  messages: ${result.messageCount}\n  resume: ${JSON.stringify(result.resume)}`;
+  if (command === 'session') return `${textSession(result)}\n  messages: ${result.messageCount}\n  attachments: ${result.attachmentCount}\n  resume: ${JSON.stringify(result.resume)}`;
+  if (command === 'attachments') return textAttachments(result.attachments) || 'No attachments for this message.';
   return JSON.stringify(result, null, 2);
 }
 
@@ -223,10 +287,12 @@ async function main() {
     if (!options.output) throw new UsageError('attachment requires --output PATH');
     const extracted = await service.getAttachmentData(options.positional[0], resolvedOptions);
     if (extracted) {
-      const output = path.resolve(options.output);
-      await fs.mkdir(path.dirname(output), { recursive: true });
-      await fs.writeFile(output, extracted.data);
-      const { data, ...metadata } = extracted;
+      const output = await writeAttachmentOutput(
+        options.output,
+        extracted.data,
+        protectedAttachmentPaths(extracted.sourcePath),
+      );
+      const { data, sourcePath, ...metadata } = extracted;
       result = { ...metadata, output };
     } else {
       result = null;
@@ -265,12 +331,15 @@ async function main() {
 main().catch(error => {
   const json = process.argv.includes('--json');
   const usage = error instanceof UsageError;
-  const message = usage ? error.message : 'Agent Recall failed. Run agent-recall doctor for local diagnostics.';
+  const stale = error?.code === 'STALE_ATTACHMENT';
+  const message = usage || stale
+    ? error.message
+    : 'Agent Recall failed. Run agent-recall doctor for local diagnostics.';
   const output = {
     schemaVersion: APP.CLI_SCHEMA_VERSION,
-    error: { kind: usage ? 'usage-error' : 'runtime-error', message },
+    error: { kind: usage ? 'usage-error' : stale ? 'stale-attachment' : 'runtime-error', message },
   };
-  const text = `error: ${usage ? error.message : `${message}\n${error.stack || ''}`}`;
+  const text = `error: ${usage || stale ? error.message : `${message}\n${error.stack || ''}`}`;
   process.stderr.write(`${json ? JSON.stringify(output) : terminalSafe(text)}\n`);
-  process.exitCode = usage ? EXIT_CODES.USAGE : EXIT_CODES.INTERNAL;
+  process.exitCode = usage ? EXIT_CODES.USAGE : stale ? EXIT_CODES.STALE : EXIT_CODES.INTERNAL;
 });

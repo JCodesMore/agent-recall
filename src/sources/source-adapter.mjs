@@ -74,20 +74,12 @@ export async function* readJsonlRecords(file, diagnostics, options = {}) {
 }
 
 export async function readJsonlRecordAt(file, targetLine) {
-  const stream = fs.createReadStream(file, { encoding: 'utf8' });
-  const lines = readline.createInterface({ input: stream, crlfDelay: Number.POSITIVE_INFINITY });
-  let line = 0;
-  try {
-    for await (const raw of lines) {
-      line += 1;
-      if (line === targetLine) return JSON.parse(raw);
-    }
-  } finally {
-    lines.close();
-    stream.destroy();
+  const diagnostics = emptyDiagnostics();
+  for await (const item of readJsonlRecords(file, diagnostics)) {
+    if (item.line === targetLine) return item.record;
+    if (item.line > targetLine) return null;
   }
   return null;
 }
 import fs from 'node:fs';
-import readline from 'node:readline';
 import { LIMITS } from '../config.mjs';

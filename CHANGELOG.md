@@ -3,7 +3,7 @@
 ## 0.4.0
 
 - Added attachment discovery and original-byte extraction for Claude Code, Codex, and OpenCode conversations.
-- Added attachment descriptors to search, context, session, and transcript results.
+- Added attachment descriptors to search, context, and transcript results, plus attachment counts on sessions.
 - Added `attachments` and `attachment --output` CLI commands.
 
 ## 0.3.0

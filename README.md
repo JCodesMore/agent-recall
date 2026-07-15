@@ -84,7 +84,11 @@ Run `node scripts/recall.mjs --help` for all options.
 
 The first sync parses all supported stores. Later syncs compare source signatures and only re-read changed files or databases.
 
-Search, context, and transcript results include attachment descriptors when a message has files or images. `attachments` lists the descriptors for one message, and `attachment` writes the original bytes from the provider history to a requested local path so an agent can inspect the file directly.
+Search, context, and transcript results include attachment descriptors when a supported message has an attachment. Claude Code support covers inline base64 image blocks, Codex support covers user `input_image` base64 data URLs, and OpenCode support covers `file` parts with base64 data URLs. Remote URLs are not fetched.
+
+`attachments` lists descriptors for one message. `attachment` writes the original bytes to a new local file with private permissions; it refuses existing files, provider source stores, and the Agent Recall database. Delete temporary extractions after inspection.
+
+Individual attachments are limited to 16 MiB. Oversized or unsupported attachment forms are omitted rather than fetched or partially decoded.
 
 The Claude plugin also checks freshness on session start, prompt submission, and stop. If the last completed sync is at least 10 minutes old, the next hook runs an incremental refresh. A short lease prevents overlapping hook events from starting duplicate refreshes. Search and recent still refresh immediately before querying.
 

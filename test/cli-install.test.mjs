@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { openDatabase } from '../src/storage/database.mjs';
@@ -12,6 +13,7 @@ const CLI = path.join(ROOT, 'scripts', 'recall.mjs');
 const INSTALLER = path.join(ROOT, 'scripts', 'install.mjs');
 let temp;
 let dataHome;
+let sourceFile;
 const PNG_DATA = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 function run(script, args, env = {}) {
@@ -26,7 +28,7 @@ before(async () => {
   temp = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-recall-cli-'));
   dataHome = path.join(temp, 'data');
   process.env.AGENT_RECALL_HOME = dataHome;
-  const sourceFile = path.join(temp, 'source.jsonl');
+  sourceFile = path.join(temp, 'source.jsonl');
   await fs.writeFile(sourceFile, `${JSON.stringify({
     type: 'user',
     uuid: 'cli-message',
@@ -60,11 +62,12 @@ before(async () => {
     db.prepare(`
       INSERT INTO attachments(
         attachment_key, message_key, session_key, provider, native_id, ordinal,
-        kind, mime, byte_length, source_path, locator_json, metadata_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        kind, mime, byte_length, sha256, source_path, locator_json, metadata_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       'claude-attachment:cli', 'claude:cli-message', 'claude:cli-session', 'claude',
       'cli-message:0', 0, 'image', 'image/png', Buffer.from(PNG_DATA, 'base64').length,
+      createHash('sha256').update(Buffer.from(PNG_DATA, 'base64')).digest('hex'),
       sourceFile, JSON.stringify({ line: 1, blockIndex: 1 }), '{}',
     );
   } finally {
@@ -106,7 +109,7 @@ test('CLI emits structured errors and validates top-level commands', () => {
   const result = run(CLI, ['unknown', '--json']);
   assert.equal(result.status, 2);
   const error = JSON.parse(result.stderr);
-  assert.equal(error.schemaVersion, 1);
+  assert.equal(error.schemaVersion, 2);
   assert.equal(error.error.kind, 'usage-error');
   assert.equal(result.stdout, '');
 });
@@ -115,7 +118,7 @@ test('CLI emits a versioned not-found envelope', () => {
   const result = run(CLI, ['session', '--json', 'claude:missing']);
   assert.equal(result.status, 3);
   const error = JSON.parse(result.stderr);
-  assert.equal(error.schemaVersion, 1);
+  assert.equal(error.schemaVersion, 2);
   assert.equal(error.error.kind, 'not-found');
   assert.equal(result.stdout, '');
 });
@@ -129,6 +132,36 @@ test('CLI lists and extracts original attachment bytes', async () => {
   const extracted = run(CLI, ['attachment', '--json', '--output', output, 'claude-attachment:cli']);
   assert.equal(extracted.status, 0, extracted.stderr);
   assert.deepEqual(await fs.readFile(output), Buffer.from(PNG_DATA, 'base64'));
+
+  const existing = run(CLI, ['attachment', '--json', '--output', output, 'claude-attachment:cli']);
+  assert.equal(existing.status, 2);
+  assert.equal(JSON.parse(existing.stderr).error.kind, 'usage-error');
+  assert.deepEqual(await fs.readFile(output), Buffer.from(PNG_DATA, 'base64'));
+
+  const sourceBefore = await fs.readFile(sourceFile);
+  const sourceOutput = run(CLI, ['attachment', '--json', '--output', sourceFile, 'claude-attachment:cli']);
+  assert.equal(sourceOutput.status, 2);
+  assert.deepEqual(await fs.readFile(sourceFile), sourceBefore);
+
+  const sidecarOutput = path.join(dataHome, 'agent-recall.db-wal');
+  const sidecar = run(CLI, ['attachment', '--json', '--output', sidecarOutput, 'claude-attachment:cli']);
+  assert.equal(sidecar.status, 2);
+
+  const changed = JSON.parse(sourceBefore.toString('utf8'));
+  changed.message.content[1].source.data = Buffer.from('changed attachment').toString('base64');
+  await fs.writeFile(sourceFile, `${JSON.stringify(changed)}\n`);
+  const staleOutput = path.join(temp, 'stale.png');
+  const stale = run(CLI, ['attachment', '--json', '--output', staleOutput, 'claude-attachment:cli']);
+  assert.equal(stale.status, 4);
+  assert.equal(JSON.parse(stale.stderr).error.kind, 'stale-attachment');
+  await assert.rejects(fs.stat(staleOutput), { code: 'ENOENT' });
+
+  changed.message.content[1].source.data = '%%%';
+  await fs.writeFile(sourceFile, `${JSON.stringify(changed)}\n`);
+  const malformed = run(CLI, ['attachment', '--json', '--output', staleOutput, 'claude-attachment:cli']);
+  assert.equal(malformed.status, 4);
+  assert.equal(JSON.parse(malformed.stderr).error.kind, 'stale-attachment');
+  await fs.writeFile(sourceFile, sourceBefore);
 });
 
 test('CLI sanitizes runtime errors and uses the internal failure exit code', async () => {

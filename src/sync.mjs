@@ -34,8 +34,8 @@ const INSERT_MESSAGE = `
 const INSERT_ATTACHMENT = `
   INSERT INTO attachments(
     attachment_key, message_key, session_key, provider, native_id, ordinal,
-    kind, mime, byte_length, source_path, locator_json, metadata_json
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    kind, mime, byte_length, sha256, source_path, locator_json, metadata_json
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
 const AUTO_SYNC_LEASE_KEY = 'auto_sync_lease';
@@ -123,9 +123,10 @@ function replaceSource(db, descriptor, parsed, indexedAt) {
         attachment.kind,
         attachment.mime,
         attachment.byteLength,
+        attachment.sha256,
         descriptor.path,
         safeJson(attachment.locator),
-        safeJson(attachment.metadata),
+        safeJson(redactValue(attachment.metadata)),
       );
     }
   });

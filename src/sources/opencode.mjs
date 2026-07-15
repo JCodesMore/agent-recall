@@ -196,6 +196,10 @@ function normalizeParts(rows, diagnostics) {
         id: String(id),
         mime: parsed.mime,
         byteLength: parsed.byteLength,
+        sha256: parsed.sha256,
+        messageId: String(messageId),
+        sessionId: String(firstDefined(row.session_id, row.sessionId, data.sessionID, data.sessionId) ?? ''),
+        name: firstDefined(data.filename, data.name) ?? null,
         sortTime: numericTime(dataTime(data, row)),
       });
       attachmentsByMessage.set(String(messageId), attachments);
@@ -234,7 +238,7 @@ function normalizeMessages(rows, textByMessage, attachmentsByMessage, knownSessi
       diagnostics.skipped += 1;
       continue;
     }
-    let text = parts.map(part => part.text).join('\n') || '[Attachment]';
+    let text = parts.map(part => part.text).join('\n');
     const truncated = text.length > LIMITS.TEXT_MAX_CHARS;
     if (text.length > LIMITS.TEXT_MAX_CHARS) {
       text = text.slice(0, LIMITS.TEXT_MAX_CHARS);
@@ -303,7 +307,7 @@ function normalizeMessages(rows, textByMessage, attachmentsByMessage, knownSessi
     });
     for (const [ordinal, attachment] of item.attachmentParts.entries()) {
       attachments.push({
-        attachmentKey: attachmentKey(PROVIDER, item.id, sourcePath, ordinal),
+        attachmentKey: attachmentKey(PROVIDER, item.id, sourcePath, attachment.id),
         messageKey: ownMessageKey,
         sessionKey: sessionKey(PROVIDER, item.nativeSessionId, sourcePath),
         provider: PROVIDER,
@@ -312,9 +316,14 @@ function normalizeMessages(rows, textByMessage, attachmentsByMessage, knownSessi
         kind: attachment.mime.startsWith('image/') ? 'image' : 'file',
         mime: attachment.mime,
         byteLength: attachment.byteLength,
+        sha256: attachment.sha256,
         sourcePath,
-        locator: { partId: attachment.id },
-        metadata: {},
+        locator: {
+          partId: attachment.id,
+          messageId: attachment.messageId,
+          sessionId: attachment.sessionId,
+        },
+        metadata: attachment.name ? { name: String(attachment.name) } : {},
       });
     }
   }
@@ -415,9 +424,16 @@ function read(descriptorValue) {
 function readAttachment(attachment) {
   const db = new DatabaseSync(attachment.sourcePath, { readOnly: true });
   try {
-    const row = db.prepare('SELECT data FROM part WHERE id = ?').get(attachment.locator.partId);
+    const row = db.prepare('SELECT message_id, session_id, data FROM part WHERE id = ?').get(attachment.locator.partId);
     if (!row) return null;
-    const data = JSON.parse(row.data);
+    if (String(row.message_id) !== String(attachment.locator.messageId)) return null;
+    if (attachment.locator.sessionId && String(row.session_id) !== String(attachment.locator.sessionId)) return null;
+    let data;
+    try {
+      data = JSON.parse(row.data);
+    } catch {
+      return null;
+    }
     if (data.type !== 'file') return null;
     return decodeDataUrl(data.url);
   } finally {

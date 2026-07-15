@@ -3,10 +3,10 @@ import path from 'node:path';
 
 export const APP = Object.freeze({
   NAME: 'agent-recall',
-  CLI_SCHEMA_VERSION: 1,
-  DB_SCHEMA_VERSION: 2,
+  CLI_SCHEMA_VERSION: 2,
+  DB_SCHEMA_VERSION: 3,
   REDACTION_POLICY_VERSION: 5,
-  INDEX_POLICY_VERSION: 'db2-redaction5-adapters6',
+  INDEX_POLICY_VERSION: 'db3-redaction5-adapters7',
   MIN_NODE: Object.freeze({ major: 22, minor: 13 }),
 });
 
@@ -50,7 +50,8 @@ export const LIMITS = Object.freeze({
   SNIPPET_MAX_CHARS: 500,
   TITLE_MAX_CHARS: 120,
   QUERY_MAX_CHARS: 2_000,
-  JSONL_MAX_LINE_CHARS: 16 * 1024 * 1024,
+  JSONL_MAX_LINE_CHARS: 24 * 1024 * 1024,
+  ATTACHMENT_MAX_BYTES: 16 * 1024 * 1024,
 });
 
 export const TOKENIZE = Object.freeze({
@@ -70,4 +71,5 @@ export const EXIT_CODES = Object.freeze({
   INTERNAL: 1,
   USAGE: 2,
   NOT_FOUND: 3,
+  STALE: 4,
 });

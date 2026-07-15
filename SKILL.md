@@ -53,8 +53,10 @@ node "<skill-root>/scripts/recall.mjs" transcript --json --limit 20 --offset 0 "
 6. When a selected hit or message has `attachments`, extract only the relevant file and inspect it with the client's file/image reader:
 
    ```text
-node "<skill-root>/scripts/recall.mjs" attachment --json --output "<temporary-output-path>" "<attachment-key>"
+   node "<skill-root>/scripts/recall.mjs" attachment --json --output "<temporary-output-path>" "<attachment-key>"
    ```
+
+   Use a new path in a private temporary directory. Delete the extracted copy immediately after inspection. If extraction reports `stale-attachment`, run `sync --json`, use the replacement attachment key, and retry.
 
 7. Synthesize the answer. Cite each material claim with provider, session key, and message timestamp or hit ID. State uncertainty when conversations disagree or a result is only inferred.
 
