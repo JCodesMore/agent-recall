@@ -7,14 +7,14 @@
   },
   "metadata": {
     "description": "Local cross-agent conversation recall",
-    "version": "0.4.0"
+    "version": "0.4.1"
   },
   "plugins": [
     {
       "name": "conversation-recall",
       "source": "./",
       "description": "Recall Claude Code, Codex, and OpenCode conversations locally.",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "strict": true
     }
   ]

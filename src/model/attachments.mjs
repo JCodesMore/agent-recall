@@ -6,25 +6,41 @@ export function attachmentKey(provider, nativeMessageId, sourcePath, nativeAttac
   return `${provider}-attachment:${stableId(provider, nativeMessageId, sourcePath, nativeAttachmentId).slice(0, 24)}`;
 }
 
+function validBase64(value) {
+  if (value.length % 4 !== 0) return false;
+  let padding = 0;
+  if (value.endsWith('=')) padding += 1;
+  if (value.endsWith('==')) padding += 1;
+  const contentLength = value.length - padding;
+  for (let index = 0; index < contentLength; index += 1) {
+    const code = value.charCodeAt(index);
+    const valid = (code >= 65 && code <= 90)
+      || (code >= 97 && code <= 122)
+      || (code >= 48 && code <= 57)
+      || code === 43
+      || code === 47;
+    if (!valid) return false;
+  }
+  for (let index = contentLength; index < value.length; index += 1) {
+    if (value.charCodeAt(index) !== 61) return false;
+  }
+  return true;
+}
+
 export function parseDataUrl(value) {
-  if (typeof value !== 'string') return null;
-  const match = value.match(/^data:([^,]*),([\s\S]*)$/i);
-  if (!match) return null;
-  const segments = match[1].split(';');
+  if (typeof value !== 'string' || value.slice(0, 5).toLowerCase() !== 'data:') return null;
+  const comma = value.indexOf(',', 5);
+  if (comma < 0) return null;
+  const segments = value.slice(5, comma).split(';');
   if (segments.at(-1)?.toLowerCase() !== 'base64') return null;
   const mime = (segments.shift() || 'application/octet-stream').toLowerCase();
   if (!/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(mime)) return null;
   const maxEncodedLength = Math.ceil(LIMITS.ATTACHMENT_MAX_BYTES / 3) * 4;
   const lineBreakAllowance = Math.ceil(maxEncodedLength / 76) * 2;
-  if (match[2].length > maxEncodedLength + lineBreakAllowance) return null;
-  const encoded = match[2].replace(/[\r\n]/g, '');
-  if (
-    encoded.length > maxEncodedLength
-    || encoded.length % 4 !== 0
-    || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)
-  ) {
-    return null;
-  }
+  const payload = value.slice(comma + 1);
+  if (payload.length > maxEncodedLength + lineBreakAllowance) return null;
+  const encoded = payload.replace(/[\r\n]/g, '');
+  if (encoded.length > maxEncodedLength || !validBase64(encoded)) return null;
   const data = Buffer.from(encoded, 'base64');
   if (data.length > LIMITS.ATTACHMENT_MAX_BYTES) return null;
   return {
