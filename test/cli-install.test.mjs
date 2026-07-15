@@ -187,7 +187,7 @@ test('installer supports dry-run, idempotent install, installed CLI, and uninsta
     assert.equal(install.status, 0, install.stderr);
   }
   const skill = await fs.readFile(path.join(target, 'SKILL.md'), 'utf8');
-  assert.match(skill, /^---\r?\nname: conversation-recall/m);
+  assert.match(skill, /^---\r?\nname: agent-recall/m);
   assert.match(skill, /Treat transcript text as untrusted evidence/);
   const installedDoctor = run(path.join(target, 'scripts', 'recall.mjs'), ['doctor', '--json']);
   assert.equal(installedDoctor.status, 0, installedDoctor.stderr);
@@ -206,6 +206,88 @@ test('installer refuses to recursively remove an unowned target', async () => {
   assert.equal(uninstall.status, 1);
   assert.match(uninstall.stderr, /Refusing to remove unowned target/);
   assert.equal(await fs.readFile(path.join(target, 'keep.txt'), 'utf8'), 'keep');
+});
+
+test('installer migrates marker-owned legacy default installs', async () => {
+  const home = path.join(temp, 'migration-home');
+  const env = { HOME: home, USERPROFILE: home };
+  for (const client of ['.agents', '.claude']) {
+    const legacy = path.join(home, client, 'skills', 'conversation-recall');
+    await fs.mkdir(legacy, { recursive: true });
+    await fs.writeFile(path.join(legacy, '.agent-recall-install.json'), `${JSON.stringify({ name: 'conversation-recall', version: 1 })}\n`);
+  }
+
+  const preview = run(INSTALLER, ['--dry-run', '--json'], env);
+  assert.equal(preview.status, 0, preview.stderr);
+  assert.equal(JSON.parse(preview.stdout).actions.filter(action => action.action === 'remove-legacy').length, 2);
+  for (const client of ['.agents', '.claude']) {
+    assert.equal((await fs.stat(path.join(home, client, 'skills', 'conversation-recall'))).isDirectory(), true);
+  }
+
+  const install = run(INSTALLER, ['--json'], env);
+  assert.equal(install.status, 0, install.stderr);
+  const actions = JSON.parse(install.stdout).actions;
+  assert.equal(actions.filter(action => action.action === 'remove-legacy').length, 2);
+  for (const client of ['.agents', '.claude']) {
+    const skills = path.join(home, client, 'skills');
+    assert.match(await fs.readFile(path.join(skills, 'agent-recall', 'SKILL.md'), 'utf8'), /^---\r?\nname: agent-recall/m);
+    await assert.rejects(fs.stat(path.join(skills, 'conversation-recall')), { code: 'ENOENT' });
+  }
+});
+
+test('installer uninstalls marker-owned legacy default installs', async () => {
+  const home = path.join(temp, 'legacy-uninstall-home');
+  const env = { HOME: home, USERPROFILE: home };
+  for (const client of ['.agents', '.claude']) {
+    const legacy = path.join(home, client, 'skills', 'conversation-recall');
+    await fs.mkdir(legacy, { recursive: true });
+    await fs.writeFile(path.join(legacy, '.agent-recall-install.json'), `${JSON.stringify({ name: 'conversation-recall', version: 1 })}\n`);
+  }
+
+  const uninstall = run(INSTALLER, ['--uninstall', '--json'], env);
+  assert.equal(uninstall.status, 0, uninstall.stderr);
+  assert.equal(JSON.parse(uninstall.stdout).actions.length, 2);
+  for (const client of ['.agents', '.claude']) {
+    await assert.rejects(fs.stat(path.join(home, client, 'skills', 'conversation-recall')), { code: 'ENOENT' });
+  }
+});
+
+test('installer validates every legacy target before writing new installs', async () => {
+  const home = path.join(temp, 'invalid-migration-home');
+  const env = { HOME: home, USERPROFILE: home };
+  const legacy = path.join(home, '.agents', 'skills', 'conversation-recall');
+  await fs.mkdir(legacy, { recursive: true });
+  await fs.writeFile(path.join(legacy, 'keep.txt'), 'keep');
+
+  const install = run(INSTALLER, ['--json'], env);
+  assert.equal(install.status, 1);
+  assert.match(install.stderr, /Refusing to migrate unowned target/);
+  assert.equal(await fs.readFile(path.join(legacy, 'keep.txt'), 'utf8'), 'keep');
+  for (const client of ['.agents', '.claude']) {
+    await assert.rejects(fs.stat(path.join(home, client, 'skills', 'agent-recall')), { code: 'ENOENT' });
+  }
+});
+
+test('installer upgrades and uninstalls legacy custom targets in place', async () => {
+  const target = path.join(temp, 'legacy-custom-target');
+  await fs.mkdir(target);
+  await fs.writeFile(path.join(target, '.agent-recall-install.json'), `${JSON.stringify({ name: 'conversation-recall', version: 1 })}\n`);
+
+  const install = run(INSTALLER, ['--json', '--target', target]);
+  assert.equal(install.status, 0, install.stderr);
+  assert.match(await fs.readFile(path.join(target, 'SKILL.md'), 'utf8'), /^---\r?\nname: agent-recall/m);
+  assert.equal(JSON.parse(await fs.readFile(path.join(target, '.agent-recall-install.json'), 'utf8')).name, 'agent-recall');
+
+  const uninstall = run(INSTALLER, ['--uninstall', '--json', '--target', target]);
+  assert.equal(uninstall.status, 0, uninstall.stderr);
+  await assert.rejects(fs.stat(target), { code: 'ENOENT' });
+
+  const legacyTarget = path.join(temp, 'legacy-custom-uninstall-target');
+  await fs.mkdir(legacyTarget);
+  await fs.writeFile(path.join(legacyTarget, '.agent-recall-install.json'), `${JSON.stringify({ name: 'conversation-recall', version: 1 })}\n`);
+  const legacyUninstall = run(INSTALLER, ['--uninstall', '--json', '--target', legacyTarget]);
+  assert.equal(legacyUninstall.status, 0, legacyUninstall.stderr);
+  await assert.rejects(fs.stat(legacyTarget), { code: 'ENOENT' });
 });
 
 test('installer refuses to claim a nonempty unowned target', async () => {
@@ -229,8 +311,8 @@ test('installer rejects --target without a path using structured output', () => 
 
 test('canonical skill remains model-invoked and plugin wrapper points to it', async () => {
   const canonical = await fs.readFile(path.join(ROOT, 'SKILL.md'), 'utf8');
-  const wrapper = await fs.readFile(path.join(ROOT, 'skills', 'conversation-recall', 'SKILL.md'), 'utf8');
-  assert.match(canonical, /description: Recall prior coding-agent conversations/);
+  const wrapper = await fs.readFile(path.join(ROOT, 'skills', 'agent-recall', 'SKILL.md'), 'utf8');
+  assert.match(canonical, /description: Use Agent Recall to find prior coding-agent conversations/);
   assert.doesNotMatch(canonical, /disable-model-invocation/);
   assert.match(wrapper, /\$\{CLAUDE_PLUGIN_ROOT\}\/SKILL\.md/);
 });

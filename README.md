@@ -21,10 +21,10 @@ From a checkout:
 node scripts/install.mjs
 ```
 
-This installs `conversation-recall` into both personal Agent Skills locations:
+This installs `agent-recall` into both personal Agent Skills locations:
 
-- `~/.agents/skills/conversation-recall` for Codex and OpenCode
-- `~/.claude/skills/conversation-recall` for Claude Code
+- `~/.agents/skills/agent-recall` for Codex and OpenCode
+- `~/.claude/skills/agent-recall` for Claude Code
 
 Preview or remove the installation:
 
@@ -40,18 +40,6 @@ claude --plugin-dir /path/to/agent-recall
 ```
 
 Restart clients that were already running when the skill was installed.
-
-### OpenCode Paste Preview
-
-To keep full multi-line pasted text visible in OpenCode instead of replacing it with `[Pasted ~N lines]`, add this to `~/.config/opencode/opencode.jsonc` and restart OpenCode:
-
-```json
-{
-  "experimental": {
-    "disable_paste_summary": true
-  }
-}
-```
 
 ## Agent CLI
 

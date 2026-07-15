@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.dirname(HERE);
 const SKILL_SOURCE = path.join(ROOT, 'SKILL.md');
-const TARGET_NAME = 'conversation-recall';
+const TARGET_NAME = 'agent-recall';
+const LEGACY_TARGET_NAME = 'conversation-recall';
 const MARKER = '.agent-recall-install.json';
 
 function parseArgs(argv) {
@@ -36,6 +37,13 @@ function defaultTargets() {
   ];
 }
 
+function legacyTargets() {
+  return [
+    path.join(os.homedir(), '.agents', 'skills', LEGACY_TARGET_NAME),
+    path.join(os.homedir(), '.claude', 'skills', LEGACY_TARGET_NAME),
+  ];
+}
+
 async function copyTree(target) {
   await fs.mkdir(target, { recursive: true });
   await fs.copyFile(SKILL_SOURCE, path.join(target, 'SKILL.md'));
@@ -60,7 +68,7 @@ async function prepareInstall(target) {
   if (entries.length === 0) return;
   try {
     const marker = JSON.parse(await fs.readFile(path.join(target, MARKER), 'utf8'));
-    if (marker.name !== TARGET_NAME) throw new Error('wrong owner');
+    if (![TARGET_NAME, LEGACY_TARGET_NAME].includes(marker.name)) throw new Error('wrong owner');
   } catch {
     throw new Error(`Refusing to install over a nonempty unowned target: ${target}`);
   }
@@ -93,16 +101,27 @@ async function installAtomically(target) {
   }
 }
 
-async function removeInstall(target) {
+async function inspectInstall(target, expectedName, action) {
   let marker;
   try {
     marker = JSON.parse(await fs.readFile(path.join(target, MARKER), 'utf8'));
   } catch (error) {
-    if (error.code === 'ENOENT') throw new Error(`Refusing to remove unowned target without ${MARKER}: ${target}`);
-    throw new Error(`Refusing to remove target with an invalid ${MARKER}: ${target}`);
+    if (error.code === 'ENOENT') {
+      try {
+        await fs.stat(target);
+      } catch (statError) {
+        if (statError.code === 'ENOENT') return false;
+        throw statError;
+      }
+      throw new Error(`Refusing to ${action} unowned target without ${MARKER}: ${target}`);
+    }
+    throw new Error(`Refusing to ${action} target with an invalid ${MARKER}: ${target}`);
   }
-  if (marker.name !== TARGET_NAME) throw new Error(`Refusing to remove target owned by ${marker.name || 'an unknown installer'}: ${target}`);
-  await fs.rm(target, { recursive: true });
+  const expectedNames = Array.isArray(expectedName) ? expectedName : [expectedName];
+  if (!expectedNames.includes(marker.name)) {
+    throw new Error(`Refusing to ${action} target owned by ${marker.name || 'an unknown installer'}: ${target}`);
+  }
+  return true;
 }
 
 async function main() {
@@ -111,17 +130,36 @@ async function main() {
     process.stdout.write('Usage: node scripts/install.mjs [--dry-run] [--uninstall] [--target PATH] [--json]\n');
     return;
   }
+  const usingDefaultTargets = !options.target;
   const targets = options.target ? [path.resolve(options.target)] : defaultTargets();
+  const legacy = usingDefaultTargets ? legacyTargets() : [];
   const actions = [];
-  if (!options.dryRun && !options.uninstall) {
+  if (!options.uninstall) {
     for (const target of targets) await prepareInstall(target);
+    for (const target of legacy) {
+      if (await inspectInstall(target, LEGACY_TARGET_NAME, 'migrate')) {
+        actions.push({ action: 'remove-legacy', target });
+      }
+    }
+    actions.unshift(...targets.map(target => ({ action: 'install', target })));
+  } else {
+    for (const target of targets) {
+      const owners = usingDefaultTargets ? TARGET_NAME : [TARGET_NAME, LEGACY_TARGET_NAME];
+      if (await inspectInstall(target, owners, 'remove')) actions.push({ action: 'remove', target });
+    }
+    for (const target of legacy) {
+      if (await inspectInstall(target, LEGACY_TARGET_NAME, 'remove')) actions.push({ action: 'remove', target });
+    }
   }
-  for (const target of targets) {
-    const action = options.uninstall ? 'remove' : 'install';
-    actions.push({ action, target });
-    if (options.dryRun) continue;
-    if (options.uninstall) await removeInstall(target);
-    else await installAtomically(target);
+  if (!options.dryRun) {
+    if (options.uninstall) {
+      for (const { target } of actions) await fs.rm(target, { recursive: true });
+    } else {
+      for (const target of targets) await installAtomically(target);
+      for (const { target } of actions.filter(item => item.action === 'remove-legacy')) {
+        await fs.rm(target, { recursive: true });
+      }
+    }
   }
   const result = { schemaVersion: 1, dryRun: options.dryRun, actions };
   process.stdout.write(`${options.json ? JSON.stringify(result) : actions.map(item => `${item.action}: ${item.target}`).join('\n')}\n`);

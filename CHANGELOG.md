@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+- Standardized the project, repository, skill, plugin, marketplace entry, and install paths on the Agent Recall name.
+- Migrated marker-owned `conversation-recall` skill installations to `agent-recall`.
+- Marketplace users must replace the old plugin installation because Claude Code keys installed plugins by name.
+
 ## 0.4.1
 
 - Fixed attachment indexing for repeated Claude message IDs and large Codex image payloads.

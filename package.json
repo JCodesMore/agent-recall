@@ -1,7 +1,7 @@
 {
   "name": "@jcodesmore/agent-recall",
-  "version": "0.4.1",
-  "description": "Local cross-agent conversation recall for Claude Code, Codex, and OpenCode.",
+  "version": "0.5.0",
+  "description": "Agent Recall provides local conversation recall across Claude Code, Codex, and OpenCode.",
   "type": "module",
   "private": true,
   "bin": {
@@ -29,13 +29,14 @@
     "CHANGELOG.md",
     "LICENSE"
   ],
-  "homepage": "https://github.com/JCodesMore/claude-search",
+  "homepage": "https://github.com/JCodesMore/agent-recall",
   "repository": {
     "type": "git",
-    "url": "https://github.com/JCodesMore/claude-search.git"
+    "url": "https://github.com/JCodesMore/agent-recall.git"
   },
   "keywords": [
     "agent-skills",
+    "agent-recall",
     "claude-code",
     "codex",
     "opencode",

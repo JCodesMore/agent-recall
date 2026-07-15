@@ -1,14 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
-  "name": "conversation-recall",
-  "description": "Recall local Claude Code, Codex, and OpenCode conversations with cited drill-down.",
-  "version": "0.4.1",
+  "name": "agent-recall",
+  "description": "Agent Recall finds local Claude Code, Codex, and OpenCode conversations with cited drill-down.",
+  "version": "0.5.0",
   "author": {
     "name": "JCodesMore",
     "url": "https://github.com/JCodesMore"
   },
-  "homepage": "https://github.com/JCodesMore/claude-search",
-  "repository": "https://github.com/JCodesMore/claude-search",
+  "homepage": "https://github.com/JCodesMore/agent-recall",
+  "repository": "https://github.com/JCodesMore/agent-recall",
   "license": "Apache-2.0",
   "keywords": [
     "search",

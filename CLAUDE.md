@@ -10,7 +10,7 @@ Local cross-agent conversation recall for Claude Code, Codex, and OpenCode.
 - `src/service.mjs` is the sole search and retrieval API.
 - `scripts/recall.mjs` exposes the machine-readable CLI.
 - `SKILL.md` is the canonical portable skill.
-- `skills/conversation-recall/SKILL.md` is the Claude plugin wrapper.
+- `skills/agent-recall/SKILL.md` is the Claude plugin wrapper.
 
 ## Discipline
 
