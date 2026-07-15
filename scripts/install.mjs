@@ -13,12 +13,13 @@ const LEGACY_TARGET_NAME = 'conversation-recall';
 const MARKER = '.agent-recall-install.json';
 
 function parseArgs(argv) {
-  const options = { dryRun: false, uninstall: false, json: false };
+  const options = { dryRun: false, uninstall: false, json: false, agentsOnly: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--dry-run') options.dryRun = true;
     else if (arg === '--uninstall') options.uninstall = true;
     else if (arg === '--json') options.json = true;
+    else if (arg === '--agents-only') options.agentsOnly = true;
     else if (arg === '--target') {
       const value = argv[++index];
       if (!value || value.startsWith('-')) throw new Error('--target requires a path');
@@ -27,21 +28,20 @@ function parseArgs(argv) {
     else if (arg === '--help' || arg === '-h') options.help = true;
     else throw new Error(`Unknown option: ${arg}`);
   }
+  if (options.agentsOnly && options.target) throw new Error('--agents-only cannot be combined with --target');
   return options;
 }
 
-function defaultTargets() {
-  return [
-    path.join(os.homedir(), '.agents', 'skills', TARGET_NAME),
-    path.join(os.homedir(), '.claude', 'skills', TARGET_NAME),
-  ];
+function defaultTargets(agentsOnly) {
+  const targets = [path.join(os.homedir(), '.agents', 'skills', TARGET_NAME)];
+  if (!agentsOnly) targets.push(path.join(os.homedir(), '.claude', 'skills', TARGET_NAME));
+  return targets;
 }
 
-function legacyTargets() {
-  return [
-    path.join(os.homedir(), '.agents', 'skills', LEGACY_TARGET_NAME),
-    path.join(os.homedir(), '.claude', 'skills', LEGACY_TARGET_NAME),
-  ];
+function legacyTargets(agentsOnly) {
+  const targets = [path.join(os.homedir(), '.agents', 'skills', LEGACY_TARGET_NAME)];
+  if (!agentsOnly) targets.push(path.join(os.homedir(), '.claude', 'skills', LEGACY_TARGET_NAME));
+  return targets;
 }
 
 async function copyTree(target) {
@@ -127,12 +127,12 @@ async function inspectInstall(target, expectedName, action) {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
-    process.stdout.write('Usage: node scripts/install.mjs [--dry-run] [--uninstall] [--target PATH] [--json]\n');
+    process.stdout.write('Usage: node scripts/install.mjs [--dry-run] [--uninstall] [--agents-only] [--target PATH] [--json]\n');
     return;
   }
   const usingDefaultTargets = !options.target;
-  const targets = options.target ? [path.resolve(options.target)] : defaultTargets();
-  const legacy = usingDefaultTargets ? legacyTargets() : [];
+  const targets = options.target ? [path.resolve(options.target)] : defaultTargets(options.agentsOnly);
+  const legacy = usingDefaultTargets ? legacyTargets(options.agentsOnly) : [];
   const actions = [];
   if (!options.uninstall) {
     for (const target of targets) await prepareInstall(target);

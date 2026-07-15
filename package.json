@@ -1,7 +1,7 @@
 {
   "name": "@jcodesmore/agent-recall",
   "version": "0.5.0",
-  "description": "Agent Recall provides local conversation recall across Claude Code, Codex, and OpenCode.",
+  "description": "Let your AI agents find any conversation you've had across Claude Code, Codex, and OpenCode.",
   "type": "module",
   "private": true,
   "bin": {

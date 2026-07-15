@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Rewrote the README and public descriptions around the cross-agent search benefit.
+- Added `--agents-only` installation for Codex and OpenCode users without Claude Code.
+
 ## 0.5.0
 
 - Standardized the project, repository, skill, plugin, marketplace entry, and install paths on the Agent Recall name.

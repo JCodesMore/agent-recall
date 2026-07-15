@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "agent-recall",
-  "description": "Agent Recall finds local Claude Code, Codex, and OpenCode conversations with cited drill-down.",
+  "description": "Let your AI agent find any conversation you've had across Claude Code, Codex, and OpenCode.",
   "version": "0.5.0",
   "author": {
     "name": "JCodesMore",

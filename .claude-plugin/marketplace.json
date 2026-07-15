@@ -6,14 +6,14 @@
     "url": "https://github.com/JCodesMore"
   },
   "metadata": {
-    "description": "Agent Recall for local cross-agent conversation history",
+    "description": "Find any conversation you've had across Claude Code, Codex, and OpenCode",
     "version": "0.5.0"
   },
   "plugins": [
     {
       "name": "agent-recall",
       "source": "./",
-      "description": "Recall Claude Code, Codex, and OpenCode conversations locally.",
+      "description": "Let your AI agent find any conversation you've had across Claude Code, Codex, and OpenCode.",
       "version": "0.5.0",
       "strict": true
     }

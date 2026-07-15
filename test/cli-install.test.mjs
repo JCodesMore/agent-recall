@@ -290,6 +290,23 @@ test('installer upgrades and uninstalls legacy custom targets in place', async (
   await assert.rejects(fs.stat(legacyTarget), { code: 'ENOENT' });
 });
 
+test('installer can target the global Agent Skills location without Claude Code', async () => {
+  const home = path.join(temp, 'agents-only-home');
+  const env = { HOME: home, USERPROFILE: home };
+  const install = run(INSTALLER, ['--agents-only', '--json'], env);
+  assert.equal(install.status, 0, install.stderr);
+  assert.deepEqual(JSON.parse(install.stdout).actions, [{
+    action: 'install',
+    target: path.join(home, '.agents', 'skills', 'agent-recall'),
+  }]);
+  assert.match(await fs.readFile(path.join(home, '.agents', 'skills', 'agent-recall', 'SKILL.md'), 'utf8'), /^---\r?\nname: agent-recall/m);
+  await assert.rejects(fs.stat(path.join(home, '.claude')), { code: 'ENOENT' });
+
+  const uninstall = run(INSTALLER, ['--agents-only', '--uninstall', '--json'], env);
+  assert.equal(uninstall.status, 0, uninstall.stderr);
+  await assert.rejects(fs.stat(path.join(home, '.agents', 'skills', 'agent-recall')), { code: 'ENOENT' });
+});
+
 test('installer refuses to claim a nonempty unowned target', async () => {
   const target = path.join(temp, 'unowned-install');
   await fs.mkdir(target);
