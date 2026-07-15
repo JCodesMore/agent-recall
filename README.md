@@ -39,8 +39,6 @@ node scripts/install.mjs --agents-only
 
 Restart Codex or OpenCode if it was already running.
 
-Claude Code is not required. The `--agents-only` option installs to the global Agent Skills folder and does not create any Claude Code files. If you use Claude Code too, follow both sections; both installations share the same local index.
-
 **That's it.** Open a new chat and ask your agent about something from an older conversation. The first search builds a private local index; later searches refresh only what changed.
 
 ## Try it
