@@ -33,6 +33,11 @@ export const DATABASE = Object.freeze({
   BUSY_TIMEOUT_MS: 5_000,
 });
 
+export const REFRESH = Object.freeze({
+  AUTO_SYNC_MAX_AGE_MS: 10 * 60 * 1_000,
+  AUTO_SYNC_LEASE_MS: 5 * 60 * 1_000,
+});
+
 export const LIMITS = Object.freeze({
   SEARCH_DEFAULT: 5,
   SEARCH_MAX: 50,

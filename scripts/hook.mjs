@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { recordActivity } from '../src/activity.mjs';
 import { PROVIDERS } from '../src/config.mjs';
+import { syncIfStale } from '../src/sync.mjs';
 
 async function readStdin() {
   if (process.stdin.isTTY) return {};
@@ -17,3 +18,4 @@ await recordActivity(PROVIDERS.CLAUDE, nativeSessionId, event, {
   cwd: input.cwd || process.cwd(),
   hookEvent: input.hook_event_name || input.hookEventName || null,
 });
+await syncIfStale();

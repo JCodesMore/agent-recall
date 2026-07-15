@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { syncHistory } from '../src/sync.mjs';
+import { syncHistory, syncIfStale } from '../src/sync.mjs';
 import {
   getContext,
   getSession,
@@ -148,6 +148,50 @@ test('sync indexes all providers transactionally and skips unchanged sources', a
   assert.equal(partialStatus.indexPolicyVersion, null);
   await syncHistory({ roots });
   assert.equal((await recallStatus()).indexPolicyVersion, 'db1-redaction5-adapters5');
+});
+
+test('automatic refresh runs only when the index is at least ten minutes old', async () => {
+  const fresh = await syncIfStale({ roots });
+  assert.equal(fresh.refreshed, false);
+  assert.equal(fresh.reason, 'fresh');
+
+  let db = await openDatabase();
+  try {
+    db.prepare("UPDATE metadata SET value = ? WHERE key = 'last_sync_at'").run(
+      new Date(Date.now() - 11 * 60 * 1_000).toISOString(),
+    );
+  } finally {
+    db.close();
+  }
+
+  const stale = await syncIfStale({ roots });
+  assert.equal(stale.refreshed, true);
+  assert.equal(stale.sync.ok, true);
+
+  db = await openDatabase();
+  try {
+    db.prepare("UPDATE metadata SET value = ? WHERE key = 'last_sync_at'").run(
+      new Date(Date.now() - 11 * 60 * 1_000).toISOString(),
+    );
+    db.prepare('INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)').run(
+      'auto_sync_lease',
+      JSON.stringify({ token: 'other-sync', expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+    );
+  } finally {
+    db.close();
+  }
+
+  const leased = await syncIfStale({ roots });
+  assert.equal(leased.refreshed, false);
+  assert.equal(leased.reason, 'in-progress');
+
+  db = await openDatabase();
+  try {
+    db.prepare("DELETE FROM metadata WHERE key = 'auto_sync_lease'").run();
+  } finally {
+    db.close();
+  }
+  await syncHistory({ roots });
 });
 
 test('search returns compact cross-provider hits and broad fallback', async () => {

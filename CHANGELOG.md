@@ -8,3 +8,4 @@
 - Added bounded search, context, session, transcript, recent, status, sync, and doctor commands.
 - Added pre-index secret redaction and evidence-based activity labels.
 - Added a portable Agent Skills definition and cross-client installer.
+- Added hook-driven incremental refresh when the index is at least 10 minutes old.

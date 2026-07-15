@@ -1,5 +1,6 @@
-import { APP } from './config.mjs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { APP, REFRESH } from './config.mjs';
 import { stableId } from './model/ids.mjs';
 import { redactRecord, redactText, redactValue } from './privacy/redactor.mjs';
 import { adaptersFor } from './sources/registry.mjs';
@@ -29,6 +30,8 @@ const INSERT_MESSAGE = `
     role, content_type, text, source_path, source_locator, model, metadata_json
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
+
+const AUTO_SYNC_LEASE_KEY = 'auto_sync_lease';
 
 function safeJson(value) {
   return JSON.stringify(value ?? {});
@@ -112,6 +115,70 @@ function removeMissingSources(db, provider, discovered) {
     for (const row of missing) remove.run(row.source_path);
   });
   return missing.length;
+}
+
+function parseJson(value, fallback = null) {
+  try {
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function claimStaleSync(db, now, maxAgeMs) {
+  return withTransaction(db, () => {
+    const lastSyncAt = db.prepare('SELECT value FROM metadata WHERE key = ?').get('last_sync_at')?.value ?? null;
+    const lastSyncTime = Date.parse(lastSyncAt);
+    if (Number.isFinite(lastSyncTime) && now - lastSyncTime < maxAgeMs) {
+      return { claimed: false, reason: 'fresh', lastSyncAt };
+    }
+
+    const leaseRow = db.prepare('SELECT value FROM metadata WHERE key = ?').get(AUTO_SYNC_LEASE_KEY);
+    const lease = parseJson(leaseRow?.value);
+    if (Number.isFinite(Date.parse(lease?.expiresAt)) && Date.parse(lease.expiresAt) > now) {
+      return { claimed: false, reason: 'in-progress', lastSyncAt };
+    }
+
+    const token = randomUUID();
+    const value = JSON.stringify({
+      token,
+      expiresAt: new Date(now + REFRESH.AUTO_SYNC_LEASE_MS).toISOString(),
+    });
+    db.prepare('INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)').run(AUTO_SYNC_LEASE_KEY, value);
+    return { claimed: true, token, value, lastSyncAt };
+  });
+}
+
+export async function syncIfStale({
+  maxAgeMs = REFRESH.AUTO_SYNC_MAX_AGE_MS,
+  now = Date.now(),
+  db: providedDb,
+  ...syncOptions
+} = {}) {
+  const db = providedDb || await openDatabase();
+  const ownsDb = !providedDb;
+  const claim = claimStaleSync(db, now, maxAgeMs);
+  try {
+    if (!claim.claimed) {
+      return {
+        schemaVersion: APP.CLI_SCHEMA_VERSION,
+        refreshed: false,
+        reason: claim.reason,
+        lastSyncAt: claim.lastSyncAt,
+      };
+    }
+    return {
+      schemaVersion: APP.CLI_SCHEMA_VERSION,
+      refreshed: true,
+      previousSyncAt: claim.lastSyncAt,
+      sync: await syncHistory({ ...syncOptions, db }),
+    };
+  } finally {
+    if (claim.claimed) {
+      db.prepare('DELETE FROM metadata WHERE key = ? AND value = ?').run(AUTO_SYNC_LEASE_KEY, claim.value);
+    }
+    if (ownsDb) db.close();
+  }
 }
 
 export async function syncHistory({ providers, roots = {}, force = false, db: providedDb } = {}) {

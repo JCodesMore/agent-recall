@@ -82,6 +82,8 @@ Run `node scripts/recall.mjs --help` for all options.
 
 The first sync parses all supported stores. Later syncs compare source signatures and only re-read changed files or databases.
 
+The Claude plugin also checks freshness on session start, prompt submission, and stop. If the last completed sync is at least 10 minutes old, the next hook runs an incremental refresh. A short lease prevents overlapping hook events from starting duplicate refreshes. Search and recent still refresh immediately before querying.
+
 ## Sources
 
 | Provider | Default store |
