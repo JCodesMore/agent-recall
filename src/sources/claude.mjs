@@ -169,6 +169,7 @@ export const claudeAdapter = {
     const attachments = [];
 
     const nativeMessageKeys = new Map();
+    const messageOccurrences = new Map();
     for await (const { record, line } of readJsonlRecords(sourcePath, diagnostics)) {
       const timestamp = asIso(record.timestamp ?? record.message?.timestamp);
       createdAt = minIso(createdAt, timestamp);
@@ -203,6 +204,8 @@ export const claudeAdapter = {
       const sequence = messages.length;
       const messageNativeId = record.uuid ?? record.message?.id
         ?? `generated:${stableId(sourcePath, line, role)}`;
+      const messageOccurrence = messageOccurrences.get(messageNativeId) ?? 0;
+      messageOccurrences.set(messageNativeId, messageOccurrence + 1);
       const parentNativeMessageId = record.parentUuid ?? record.message?.parentId ?? null;
       const ownMessageKey = messageKey(PROVIDERS.CLAUDE, messageNativeId, sourcePath, sequence);
       messages.push({
@@ -228,11 +231,16 @@ export const claudeAdapter = {
         const duplicate = images.slice(0, ordinal).filter(candidate => candidate.sha256 === image.sha256).length;
         const nativeAttachmentId = `${image.sha256}:${duplicate}`;
         attachments.push({
-          attachmentKey: attachmentKey(PROVIDERS.CLAUDE, messageNativeId, sourcePath, nativeAttachmentId),
+          attachmentKey: attachmentKey(
+            PROVIDERS.CLAUDE,
+            messageNativeId,
+            sourcePath,
+            `${messageOccurrence}:${nativeAttachmentId}`,
+          ),
           messageKey: ownMessageKey,
           sessionKey: ownSessionKey,
           provider: PROVIDERS.CLAUDE,
-          nativeId: nativeAttachmentId,
+          nativeId: `${messageOccurrence}:${nativeAttachmentId}`,
           ordinal,
           kind: 'image',
           mime: image.mime,

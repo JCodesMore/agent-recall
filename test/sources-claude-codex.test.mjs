@@ -169,6 +169,8 @@ test('attachment parsing is strict and content-bound keys survive earlier insert
   assert.equal(parseDataUrl('data:image/png;charset=utf-8;base64,QUJDRA==').mime, 'image/png');
   assert.equal(parseDataUrl('data:image/png;base64,A==='), null);
   assert.equal(parseDataUrl('data:image/png,QUJDRA=='), null);
+  const large = 'A'.repeat(4 * 1024 * 1024);
+  assert.equal(parseDataUrl(`data:application/octet-stream;base64,${large}`).byteLength, 3 * 1024 * 1024);
   const oversized = 'A'.repeat(Math.ceil(LIMITS.ATTACHMENT_MAX_BYTES / 3) * 4 + 4);
   assert.equal(parseDataUrl(`data:application/octet-stream;base64,${oversized}`), null);
 
@@ -189,4 +191,9 @@ test('attachment parsing is strict and content-bound keys survive earlier insert
   const reindexed = second.attachments.find(attachment => attachment.sha256 === original.sha256);
   assert.equal(reindexed.attachmentKey, original.attachmentKey);
   assert.equal(reindexed.ordinal, 1);
+
+  await writeJsonl(source, [record([PNG_DATA]), record([PNG_DATA])]);
+  const repeated = await claudeAdapter.read({ path: source, metadata: {} });
+  assert.equal(repeated.attachments.length, 2);
+  assert.equal(new Set(repeated.attachments.map(attachment => attachment.attachmentKey)).size, 2);
 });

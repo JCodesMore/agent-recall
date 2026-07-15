@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+- Fixed attachment indexing for repeated Claude message IDs and large Codex image payloads.
+
 ## 0.4.0
 
 - Added attachment discovery and original-byte extraction for Claude Code, Codex, and OpenCode conversations.

@@ -6,7 +6,7 @@ export const APP = Object.freeze({
   CLI_SCHEMA_VERSION: 2,
   DB_SCHEMA_VERSION: 3,
   REDACTION_POLICY_VERSION: 5,
-  INDEX_POLICY_VERSION: 'db3-redaction5-adapters7',
+  INDEX_POLICY_VERSION: 'db3-redaction5-adapters8',
   MIN_NODE: Object.freeze({ major: 22, minor: 13 }),
 });
 

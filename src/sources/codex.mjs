@@ -281,18 +281,26 @@ export const codexAdapter = {
       makeMessage(candidate, nativeId, sourcePath, sequence, diagnostics, keysByNativeId)
     ));
     const attachments = [];
+    const messageOccurrences = new Map();
     selectedCandidates.forEach((candidate, sequence) => {
       const nativeMessageId = candidateNativeId(candidate, sourcePath);
+      const messageOccurrence = messageOccurrences.get(nativeMessageId) ?? 0;
+      messageOccurrences.set(nativeMessageId, messageOccurrence + 1);
       const ownMessageKey = messageKey(PROVIDERS.CODEX, nativeMessageId, sourcePath, sequence);
       for (const [ordinal, image] of (candidate.images || []).entries()) {
         const duplicate = candidate.images.slice(0, ordinal).filter(item => item.sha256 === image.sha256).length;
         const nativeAttachmentId = `${image.sha256}:${duplicate}`;
         attachments.push({
-          attachmentKey: attachmentKey(PROVIDERS.CODEX, nativeMessageId, sourcePath, nativeAttachmentId),
+          attachmentKey: attachmentKey(
+            PROVIDERS.CODEX,
+            nativeMessageId,
+            sourcePath,
+            `${messageOccurrence}:${nativeAttachmentId}`,
+          ),
           messageKey: ownMessageKey,
           sessionKey: sessionKey(PROVIDERS.CODEX, nativeId, sourcePath),
           provider: PROVIDERS.CODEX,
-          nativeId: nativeAttachmentId,
+          nativeId: `${messageOccurrence}:${nativeAttachmentId}`,
           ordinal,
           kind: 'image',
           mime: image.mime,
