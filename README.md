@@ -63,6 +63,8 @@ node scripts/recall.mjs search --json --cwd . --limit 5 -- "database migration"
 node scripts/recall.mjs context --json <hit-id>
 node scripts/recall.mjs session --json <session-key>
 node scripts/recall.mjs transcript --json --limit 20 --offset 0 <session-key>
+node scripts/recall.mjs attachments --json <message-key>
+node scripts/recall.mjs attachment --json --output ./attachment.png <attachment-key>
 node scripts/recall.mjs recent --json --cwd . --limit 10
 node scripts/recall.mjs status --json
 node scripts/recall.mjs sync --json
@@ -81,6 +83,8 @@ Run `node scripts/recall.mjs --help` for all options.
 - Provider, project, and time filters
 
 The first sync parses all supported stores. Later syncs compare source signatures and only re-read changed files or databases.
+
+Search, context, and transcript results include attachment descriptors when a message has files or images. `attachments` lists the descriptors for one message, and `attachment` writes the original bytes from the provider history to a requested local path so an agent can inspect the file directly.
 
 The Claude plugin also checks freshness on session start, prompt submission, and stop. If the last completed sync is at least 10 minutes old, the next hook runs an incremental refresh. A short lease prevents overlapping hook events from starting duplicate refreshes. Search and recent still refresh immediately before querying.
 

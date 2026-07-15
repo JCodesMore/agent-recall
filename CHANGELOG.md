@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+- Added attachment discovery and original-byte extraction for Claude Code, Codex, and OpenCode conversations.
+- Added attachment descriptors to search, context, session, and transcript results.
+- Added `attachments` and `attachment --output` CLI commands.
+
 ## 0.3.0
 
 - Rebuilt the former Claude-only search plugin as Agent Recall.

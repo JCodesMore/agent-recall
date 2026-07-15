@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { APP, EXIT_CODES, LIMITS, PROVIDERS } from '../src/config.mjs';
 import { displayPath } from '../src/paths.mjs';
 
@@ -15,6 +17,8 @@ Usage:
   agent-recall context [options] <hit-id>
   agent-recall session [options] <session-key>
   agent-recall transcript [options] <session-key>
+  agent-recall attachments [options] <message-key>
+  agent-recall attachment [options] <attachment-key>
   agent-recall recent [options]
   agent-recall status [--json]
   agent-recall sync [--provider NAME] [--force] [--json]
@@ -38,6 +42,9 @@ Context options:
 Transcript options:
   --offset N             Message offset for pagination
 
+Attachment options:
+  --output PATH          Write the original attachment bytes to PATH
+
 Session options:
   --source               Include the protected source path`;
 
@@ -46,7 +53,7 @@ class UsageError extends Error {}
 function parseArgs(argv) {
   const options = { positional: [], json: false, sync: true };
   let positionalOnly = false;
-  const valueFlags = new Set(['--provider', '--cwd', '--limit', '--since', '--until', '--before', '--after', '--offset']);
+  const valueFlags = new Set(['--provider', '--cwd', '--limit', '--since', '--until', '--before', '--after', '--offset', '--output']);
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (positionalOnly) {
@@ -93,6 +100,7 @@ function commandOptions(options) {
     after: options.after,
     offset: options.offset,
     includeSource: options.includeSource,
+    output: options.output,
   };
 }
 
@@ -207,6 +215,22 @@ async function main() {
   } else if (command === 'transcript') {
     if (options.positional.length !== 1) throw new UsageError('transcript requires one session key');
     result = await service.getTranscript(options.positional[0], resolvedOptions);
+  } else if (command === 'attachments') {
+    if (options.positional.length !== 1) throw new UsageError('attachments requires one message key');
+    result = await service.listAttachments(options.positional[0], resolvedOptions);
+  } else if (command === 'attachment') {
+    if (options.positional.length !== 1) throw new UsageError('attachment requires one attachment key');
+    if (!options.output) throw new UsageError('attachment requires --output PATH');
+    const extracted = await service.getAttachmentData(options.positional[0], resolvedOptions);
+    if (extracted) {
+      const output = path.resolve(options.output);
+      await fs.mkdir(path.dirname(output), { recursive: true });
+      await fs.writeFile(output, extracted.data);
+      const { data, ...metadata } = extracted;
+      result = { ...metadata, output };
+    } else {
+      result = null;
+    }
   } else if (command === 'recent') {
     result = await service.recentSessions(resolvedOptions);
   } else if (command === 'status') {

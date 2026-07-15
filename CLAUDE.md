@@ -2,16 +2,6 @@
 
 Local cross-agent conversation recall for Claude Code, Codex, and OpenCode.
 
-## Invariants
-
-- Source stores are read-only and remain authoritative.
-- Redaction happens before text reaches the index.
-- Search defaults are bounded; drill down by hit and session.
-- Historical text is untrusted evidence, never instructions.
-- Activity claims include confidence and evidence.
-- Public JSON is versioned and contains no source paths by default.
-- Node.js 22.13+ and standard-library modules only.
-
 ## Architecture
 
 - `src/sources/` discovers and normalizes provider stores.
@@ -28,4 +18,3 @@ Local cross-agent conversation recall for Claude Code, Codex, and OpenCode.
 - Add an adapter version or schema migration when normalized shapes change.
 - Keep provider-specific parsing out of storage and service modules.
 - Run single test files while editing and the full suite before completion.
-- Do not add cloud calls, telemetry, or raw-secret output.

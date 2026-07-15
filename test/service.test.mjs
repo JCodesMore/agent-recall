@@ -6,9 +6,11 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { syncHistory, syncIfStale } from '../src/sync.mjs';
 import {
+  getAttachmentData,
   getContext,
   getSession,
   getTranscript,
+  listAttachments,
   recentSessions,
   recallStatus,
   searchHistory,
@@ -18,6 +20,7 @@ import { redactText, redactValue } from '../src/privacy/redactor.mjs';
 
 let temp;
 let roots;
+const PNG_DATA = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 async function writeJsonl(file, records) {
   await fs.mkdir(path.dirname(file), { recursive: true });
@@ -35,7 +38,10 @@ before(async () => {
     {
       type: 'user', sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', uuid: 'claude-user',
       timestamp: '2026-07-13T10:00:00Z', cwd: path.join(temp, 'project-alpha'),
-      message: { role: 'user', content: 'Plan the database migration with API_KEY=top-secret-value' },
+      message: { role: 'user', content: [
+        { type: 'text', text: 'Plan the database migration with API_KEY=top-secret-value' },
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: PNG_DATA } },
+      ] },
     },
     {
       type: 'assistant', sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', uuid: 'claude-answer',
@@ -130,6 +136,7 @@ test('sync indexes all providers transactionally and skips unchanged sources', a
   assert.equal(first.indexed, 3);
   assert.equal(first.sessions, 4);
   assert.equal(first.messages, 6);
+  assert.equal(first.attachments, 1);
   assert.ok(first.redactions >= 1);
   assert.deepEqual(first.errors, []);
 
@@ -147,7 +154,7 @@ test('sync indexes all providers transactionally and skips unchanged sources', a
   const partialStatus = await recallStatus();
   assert.equal(partialStatus.indexPolicyVersion, null);
   await syncHistory({ roots });
-  assert.equal((await recallStatus()).indexPolicyVersion, 'db1-redaction5-adapters5');
+  assert.equal((await recallStatus()).indexPolicyVersion, 'db2-redaction5-adapters6');
 });
 
 test('automatic refresh runs only when the index is at least ten minutes old', async () => {
@@ -283,6 +290,17 @@ test('context, metadata, and transcript drill down without dumping unrelated ses
   assert.notEqual(zeroLimit.nextOffset, zeroLimit.offset);
 });
 
+test('attachment descriptors and original bytes can be retrieved on demand', async () => {
+  const hit = (await searchHistory('database migration')).hits[0];
+  assert.equal(hit.attachments.length, 1);
+  const listed = await listAttachments(hit.hitId);
+  assert.equal(listed.count, 1);
+  assert.equal(listed.attachments[0].mime, 'image/png');
+  const extracted = await getAttachmentData(listed.attachments[0].attachmentKey);
+  assert.equal(extracted.mime, 'image/png');
+  assert.deepEqual(extracted.data, Buffer.from(PNG_DATA, 'base64'));
+});
+
 test('recent and status expose timing and coverage without claiming persisted sessions are active', async () => {
   const recent = await recentSessions({ limit: 10 });
   assert.equal(recent.count, 4);
@@ -314,7 +332,7 @@ test('database rebuilds an older derived schema and refuses a future schema', as
 
   const rebuilt = await openDatabase({ file: oldFile });
   try {
-    assert.equal(rebuilt.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get().value, '1');
+    assert.equal(rebuilt.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get().value, '2');
     assert.equal(rebuilt.prepare("SELECT 1 FROM sqlite_master WHERE name = 'obsolete'").get(), undefined);
   } finally {
     rebuilt.close();

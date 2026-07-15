@@ -9,6 +9,7 @@ import { claudeAdapter } from '../src/sources/claude.mjs';
 import { codexAdapter } from '../src/sources/codex.mjs';
 
 let temporaryRoot;
+const PNG_DATA = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 function jsonl(records) {
   return records.map(record => typeof record === 'string' ? record : JSON.stringify(record)).join('\n') + '\n';
@@ -44,6 +45,7 @@ test('Claude discovers main and subagent sessions and reads only conversational 
     ] } },
     { type: 'user', sessionId, timestamp: '2026-01-01T00:02:00Z', message: { role: 'user', content: [
       { type: 'text', text: 'Array user text.' },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: PNG_DATA } },
       { type: 'tool_result', content: 'secret tool result' },
     ] } },
     { type: 'system', message: { role: 'system', content: 'secret system prompt' } },
@@ -82,6 +84,8 @@ test('Claude discovers main and subagent sessions and reads only conversational 
   assert.equal(result.diagnostics.malformed, 1);
   assert.equal(result.diagnostics.truncated, 1);
   assert.ok(result.diagnostics.skipped >= 1);
+  assert.equal(result.attachments.length, 1);
+  assert.deepEqual((await claudeAdapter.readAttachment(result.attachments[0])).data, Buffer.from(PNG_DATA, 'base64'));
 
   const subResult = await claudeAdapter.read(descriptors.find(descriptor => descriptor.metadata.isSubagent));
   assert.equal(subResult.sessions[0].nativeId, `${sessionId}:subagent:agent-research`);
@@ -103,7 +107,10 @@ test('Codex prefers response items, captures context, and discovers archives', a
     { timestamp: '2026-07-14T10:00:01Z', type: 'turn_context', payload: { cwd: 'C:\\repo\\active', model: 'gpt-test' } },
     { timestamp: '2026-07-14T10:00:02Z', type: 'response_item', payload: { type: 'message', role: 'developer', content: [{ type: 'input_text', text: 'secret system prompt' }] } },
     { timestamp: '2026-07-14T10:00:02.500Z', type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: '<codex_internal_context source="goal">injected goal</codex_internal_context>' }] } },
-    { timestamp: '2026-07-14T10:00:03Z', type: 'response_item', payload: { type: 'message', role: 'user', id: 'codex-user', content: [{ type: 'input_text', text: '<environment_context>injected</environment_context>Actual request.' }] } },
+    { timestamp: '2026-07-14T10:00:03Z', type: 'response_item', payload: { type: 'message', role: 'user', id: 'codex-user', content: [
+      { type: 'input_text', text: '<environment_context>injected</environment_context>Actual request.' },
+      { type: 'input_image', image_url: `data:image/png;base64,${PNG_DATA}` },
+    ] } },
     { timestamp: '2026-07-14T10:00:03.250Z', type: 'event_msg', payload: { type: 'user_message', message: 'Actual request.' } },
     '{ bad json',
     { timestamp: '2026-07-14T10:00:04Z', type: 'response_item', payload: { type: 'reasoning', summary: [{ type: 'summary_text', text: 'secret reasoning' }] } },
@@ -138,6 +145,8 @@ test('Codex prefers response items, captures context, and discovers archives', a
   assert.ok(activeResult.messages.every(message => message.model === 'gpt-test'));
   assert.equal(activeResult.diagnostics.malformed, 1);
   assert.ok(activeResult.diagnostics.skipped >= 3);
+  assert.equal(activeResult.attachments.length, 1);
+  assert.deepEqual((await codexAdapter.readAttachment(activeResult.attachments[0])).data, Buffer.from(PNG_DATA, 'base64'));
   assert.doesNotMatch(activeResult.messages.map(message => message.text).join('\n'), /secret|injected/);
 
   const archivedResult = await codexAdapter.read(descriptors.find(descriptor => descriptor.metadata.archived));

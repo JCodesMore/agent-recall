@@ -2,8 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { LIMITS, PATHS, PROVIDERS } from '../config.mjs';
+import { attachmentKey, parseDataUrl } from '../model/attachments.mjs';
 import { asIso, messageKey, sessionKey, stableId } from '../model/ids.mjs';
-import { emptyDiagnostics, readJsonlRecords, sourceSignature } from './source-adapter.mjs';
+import { emptyDiagnostics, readJsonlRecordAt, readJsonlRecords, sourceSignature } from './source-adapter.mjs';
 
 const INJECTED_BLOCKS = [
   'system-reminder',
@@ -59,6 +60,17 @@ function contentText(content) {
     if (text.length >= cap) break;
   }
   return text;
+}
+
+function contentImages(content) {
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((block, blockIndex) => {
+    if (block?.type !== 'image' || block.source?.type !== 'base64') return [];
+    const mime = String(block.source.media_type || 'application/octet-stream').toLowerCase();
+    const parsed = parseDataUrl(`data:${mime};base64,${block.source.data || ''}`);
+    if (!parsed) return [];
+    return [{ blockIndex, mime: parsed.mime, byteLength: parsed.byteLength }];
+  });
 }
 
 function truncate(text, diagnostics) {
@@ -154,6 +166,7 @@ export const claudeAdapter = {
     let updatedAt = null;
     const versions = new Set();
     const messages = [];
+    const attachments = [];
 
     const nativeMessageKeys = new Map();
     for await (const { record, line } of readJsonlRecords(sourcePath, diagnostics)) {
@@ -177,7 +190,8 @@ export const claudeAdapter = {
         continue;
       }
 
-      const text = contentText(record.message?.content);
+      const images = contentImages(record.message?.content);
+      const text = contentText(record.message?.content) || (images.length ? '[Image attachment]' : '');
       if (!text) {
         diagnostics.skipped += 1;
         continue;
@@ -199,7 +213,7 @@ export const claudeAdapter = {
         sequence,
         timestamp,
         role,
-        contentType: 'text',
+        contentType: images.length && text === '[Image attachment]' ? 'attachment' : 'text',
         text: truncate(text, diagnostics),
         sourcePath,
         sourceLocator: `line:${line}`,
@@ -210,6 +224,22 @@ export const claudeAdapter = {
           truncated,
         },
       });
+      for (const [ordinal, image] of images.entries()) {
+        attachments.push({
+          attachmentKey: attachmentKey(PROVIDERS.CLAUDE, messageNativeId, sourcePath, ordinal),
+          messageKey: ownMessageKey,
+          sessionKey: ownSessionKey,
+          provider: PROVIDERS.CLAUDE,
+          nativeId: `${messageNativeId}:${ordinal}`,
+          ordinal,
+          kind: 'image',
+          mime: image.mime,
+          byteLength: image.byteLength,
+          sourcePath,
+          locator: { line, blockIndex: image.blockIndex },
+          metadata: {},
+        });
+      }
       nativeMessageKeys.set(messageNativeId, ownMessageKey);
     }
 
@@ -248,6 +278,16 @@ export const claudeAdapter = {
       },
     };
 
-    return { sessions: [session], messages, diagnostics };
+    return { sessions: [session], messages, attachments, diagnostics };
+  },
+
+  async readAttachment(attachment) {
+    const record = await readJsonlRecordAt(attachment.sourcePath, attachment.locator.line);
+    const block = record?.message?.content?.[attachment.locator.blockIndex];
+    if (block?.type !== 'image' || block.source?.type !== 'base64') return null;
+    return {
+      mime: String(block.source.media_type || attachment.mime).toLowerCase(),
+      data: Buffer.from(block.source.data, 'base64'),
+    };
   },
 };

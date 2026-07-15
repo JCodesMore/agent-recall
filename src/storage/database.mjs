@@ -63,6 +63,26 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS messages_session_sequence ON messages(session_key, sequence);
 CREATE INDEX IF NOT EXISTS messages_timestamp ON messages(timestamp DESC);
 
+CREATE TABLE IF NOT EXISTS attachments (
+  attachment_key TEXT PRIMARY KEY,
+  message_key TEXT NOT NULL,
+  session_key TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  native_id TEXT NOT NULL,
+  ordinal INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  byte_length INTEGER NOT NULL,
+  source_path TEXT NOT NULL,
+  locator_json TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  FOREIGN KEY(message_key) REFERENCES messages(message_key) ON DELETE CASCADE,
+  FOREIGN KEY(session_key) REFERENCES sessions(session_key) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS attachments_message ON attachments(message_key, ordinal);
+CREATE INDEX IF NOT EXISTS attachments_session ON attachments(session_key);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
   text,
   content='messages',

@@ -4,9 +4,9 @@ import path from 'node:path';
 export const APP = Object.freeze({
   NAME: 'agent-recall',
   CLI_SCHEMA_VERSION: 1,
-  DB_SCHEMA_VERSION: 1,
+  DB_SCHEMA_VERSION: 2,
   REDACTION_POLICY_VERSION: 5,
-  INDEX_POLICY_VERSION: 'db1-redaction5-adapters5',
+  INDEX_POLICY_VERSION: 'db2-redaction5-adapters6',
   MIN_NODE: Object.freeze({ major: 22, minor: 13 }),
 });
 

@@ -2,8 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { LIMITS, PATHS, PROVIDERS } from '../config.mjs';
+import { attachmentKey, decodeDataUrl, parseDataUrl } from '../model/attachments.mjs';
 import { asIso, messageKey, sessionKey, stableId } from '../model/ids.mjs';
-import { emptyDiagnostics, readJsonlRecords, sourceSignature } from './source-adapter.mjs';
+import { emptyDiagnostics, readJsonlRecordAt, readJsonlRecords, sourceSignature } from './source-adapter.mjs';
 
 const CODEX_NOISE_TAGS = ['codex_internal_context', 'environment_context', 'turn_aborted', 'user_instructions'];
 
@@ -49,6 +50,16 @@ function responseText(content, role) {
     if (text.length >= cap) break;
   }
   return text;
+}
+
+function responseImages(content, role) {
+  if (role !== 'user' || !Array.isArray(content)) return [];
+  return content.flatMap((block, blockIndex) => {
+    if (block?.type !== 'input_image') return [];
+    const parsed = parseDataUrl(block.image_url);
+    if (!parsed) return [];
+    return [{ blockIndex, mime: parsed.mime, byteLength: parsed.byteLength }];
+  });
 }
 
 function eventText(payload) {
@@ -121,7 +132,7 @@ function makeMessage(candidate, nativeSessionId, sourcePath, sequence, diagnosti
     sequence,
     timestamp: candidate.timestamp,
     role: candidate.role,
-    contentType: 'text',
+    contentType: candidate.images?.length && candidate.text === '[Image attachment]' ? 'attachment' : 'text',
     text: truncate(candidate.text, diagnostics),
     sourcePath,
     sourceLocator: `line:${candidate.line}`,
@@ -211,7 +222,8 @@ export const codexAdapter = {
           continue;
         }
         const text = responseText(payload.content, payload.role);
-        if (!text) {
+        const images = responseImages(payload.content, payload.role);
+        if (!text && images.length === 0) {
           diagnostics.skipped += 1;
           continue;
         }
@@ -220,7 +232,8 @@ export const codexAdapter = {
         responseCandidates.push({
           line,
           role: payload.role,
-          text,
+          text: text || '[Image attachment]',
+          images,
           timestamp,
           model: candidateModel,
           nativeId: payload.id ?? record.id ?? null,
@@ -267,6 +280,27 @@ export const codexAdapter = {
     const messages = selectedCandidates.map((candidate, sequence) => (
       makeMessage(candidate, nativeId, sourcePath, sequence, diagnostics, keysByNativeId)
     ));
+    const attachments = [];
+    selectedCandidates.forEach((candidate, sequence) => {
+      const nativeMessageId = candidateNativeId(candidate, sourcePath);
+      const ownMessageKey = messageKey(PROVIDERS.CODEX, nativeMessageId, sourcePath, sequence);
+      for (const [ordinal, image] of (candidate.images || []).entries()) {
+        attachments.push({
+          attachmentKey: attachmentKey(PROVIDERS.CODEX, nativeMessageId, sourcePath, ordinal),
+          messageKey: ownMessageKey,
+          sessionKey: sessionKey(PROVIDERS.CODEX, nativeId, sourcePath),
+          provider: PROVIDERS.CODEX,
+          nativeId: `${nativeMessageId}:${ordinal}`,
+          ordinal,
+          kind: 'image',
+          mime: image.mime,
+          byteLength: image.byteLength,
+          sourcePath,
+          locator: { line: candidate.line, blockIndex: image.blockIndex },
+          metadata: {},
+        });
+      }
+    });
     const archived = descriptor.metadata?.archived === true;
     cwd = cwd ?? sessionMeta.cwd ?? null;
     model = model ?? sessionMeta.model ?? null;
@@ -302,6 +336,13 @@ export const codexAdapter = {
       },
     };
 
-    return { sessions: [session], messages, diagnostics };
+    return { sessions: [session], messages, attachments, diagnostics };
+  },
+
+  async readAttachment(attachment) {
+    const record = await readJsonlRecordAt(attachment.sourcePath, attachment.locator.line);
+    const block = record?.payload?.content?.[attachment.locator.blockIndex];
+    if (block?.type !== 'input_image') return null;
+    return decodeDataUrl(block.image_url);
   },
 };
