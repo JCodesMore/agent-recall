@@ -1,24 +1,26 @@
 {
-  "name": "@jcodesmore/claude-search",
-  "version": "0.2.0",
-  "description": "Local ranked full-text search across Claude Code transcripts. Two-command install, zero config.",
+  "name": "@jcodesmore/agent-recall",
+  "version": "0.3.0",
+  "description": "Local cross-agent conversation recall for Claude Code, Codex, and OpenCode.",
   "type": "module",
   "private": true,
   "bin": {
-    "claude-search": "./scripts/search.mjs"
+    "agent-recall": "./scripts/recall.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "scripts": {
-    "search": "node ./scripts/search.mjs",
-    "index": "node ./scripts/index-delta.mjs",
+    "recall": "node ./scripts/recall.mjs",
+    "sync": "node ./scripts/recall.mjs sync",
+    "doctor": "node ./scripts/recall.mjs doctor",
+    "install-skill": "node ./scripts/install.mjs",
     "test": "node --test test/*.test.mjs",
-    "test:watch": "node --test --watch test/*.test.mjs",
-    "build-fixtures": "node test/fixtures/build.mjs"
+    "test:watch": "node --test --watch test/*.test.mjs"
   },
   "files": [
     ".claude-plugin",
+    "SKILL.md",
     "skills",
     "hooks",
     "scripts",
@@ -33,13 +35,13 @@
     "url": "https://github.com/JCodesMore/claude-search.git"
   },
   "keywords": [
+    "agent-skills",
     "claude-code",
-    "search",
-    "transcripts",
-    "sessions",
-    "history",
-    "local",
-    "plugin"
+    "codex",
+    "opencode",
+    "conversation-search",
+    "session-history",
+    "local-first"
   ],
   "license": "Apache-2.0"
 }
