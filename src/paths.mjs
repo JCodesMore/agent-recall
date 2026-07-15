@@ -1,77 +1,54 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
-import { PATHS, TRANSCRIPT } from './config.mjs';
+import { DATABASE } from './config.mjs';
 
-export function indexHome() {
-  return process.env.CLAUDE_SEARCH_HOME || PATHS.INDEX_HOME;
+export function dataHome() {
+  if (process.env.AGENT_RECALL_HOME) return path.resolve(process.env.AGENT_RECALL_HOME);
+  if (process.platform === 'win32') {
+    return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'agent-recall');
+  }
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'agent-recall');
+  }
+  return path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'agent-recall');
 }
 
-export async function ensureIndexHome() {
-  const dir = indexHome();
-  await fs.mkdir(dir, { recursive: true });
+export function databasePath() {
+  return path.join(dataHome(), DATABASE.FILE);
+}
+
+export async function ensureDataHome() {
+  const dir = dataHome();
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  if (process.platform !== 'win32') await fs.chmod(dir, 0o700);
   return dir;
 }
 
-export function sessionIdFromFile(filePath) {
-  const base = path.basename(filePath, TRANSCRIPT.JSONL_EXT);
-  const m = base.match(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i);
-  return m ? m[0] : base;
+export function displayPath(value) {
+  if (!value) return null;
+  const home = os.homedir();
+  const normalized = path.normalize(value);
+  if (normalized === home) return '~';
+  if (normalized.startsWith(home + path.sep)) return `~${path.sep}${path.relative(home, normalized)}`;
+  if (path.isAbsolute(normalized)) return `<external>${path.sep}${path.basename(normalized)}`;
+  return normalized;
 }
 
-export function decodeProjectDir(name) {
-  if (!name) return name;
-  if (/^[A-Za-z]--/.test(name)) {
-    const drive = name[0].toUpperCase();
-    return `${drive}:\\${name.slice(3).replaceAll('-', '\\')}`;
+export async function safeReaddir(dir, options = {}) {
+  try {
+    return await fs.readdir(dir, options);
+  } catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'EACCES') return [];
+    throw error;
   }
-  return '/' + name.replaceAll('-', '/');
 }
 
-async function safeReaddir(dir, opts) {
-  try { return await fs.readdir(dir, opts); }
-  catch (err) { if (err.code === 'ENOENT') return []; throw err; }
-}
-
-async function findTranscriptsInProject(projectDir) {
-  const entries = await safeReaddir(projectDir, { withFileTypes: true });
-  const topLevel = [];
-  const subagent = [];
-  for (const e of entries) {
-    const full = path.join(projectDir, e.name);
-    if (e.isFile() && e.name.endsWith(TRANSCRIPT.JSONL_EXT)) {
-      topLevel.push({ file: full, sessionId: sessionIdFromFile(full), project: projectDir, isSubagent: false });
-    } else if (e.isDirectory()) {
-      const subagentDir = path.join(full, TRANSCRIPT.SUBAGENT_DIR);
-      const subEntries = await safeReaddir(subagentDir, { withFileTypes: true });
-      for (const s of subEntries) {
-        if (s.isFile() && s.name.startsWith(TRANSCRIPT.SUBAGENT_PREFIX) && s.name.endsWith(TRANSCRIPT.JSONL_EXT)) {
-          subagent.push({
-            file: path.join(subagentDir, s.name),
-            sessionId: sessionIdFromFile(full),
-            project: projectDir,
-            isSubagent: true,
-            subagentName: path.basename(s.name, TRANSCRIPT.JSONL_EXT),
-          });
-        }
-      }
-    }
+export async function safeStat(file) {
+  try {
+    return await fs.stat(file);
+  } catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'EACCES') return null;
+    throw error;
   }
-  return [...topLevel, ...subagent];
-}
-
-export async function listTranscripts({ root = PATHS.PROJECTS_ROOT } = {}) {
-  const projects = await safeReaddir(root, { withFileTypes: true });
-  const out = [];
-  for (const p of projects) {
-    if (!p.isDirectory()) continue;
-    const projectDir = path.join(root, p.name);
-    const files = await findTranscriptsInProject(projectDir);
-    out.push(...files);
-  }
-  return out;
-}
-
-export function displayProject(projectDir) {
-  const name = path.basename(projectDir);
-  return decodeProjectDir(name);
 }

@@ -6,22 +6,9 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/index-delta.mjs"],
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs", "start"],
             "async": true,
-            "timeout": 600
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/index-worker.mjs"],
-            "async": true,
-            "timeout": 600
+            "timeout": 30
           }
         ]
       }
@@ -32,9 +19,22 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/index-worker.mjs"],
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs", "prompt"],
             "async": true,
-            "timeout": 600
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs", "stop"],
+            "async": true,
+            "timeout": 30
           }
         ]
       }

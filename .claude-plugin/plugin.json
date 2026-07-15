@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
-  "name": "claude-search",
-  "description": "Search your past Claude Code conversations — ranked results, resumable in one command",
-  "version": "0.2.0",
+  "name": "conversation-recall",
+  "description": "Recall local Claude Code, Codex, and OpenCode conversations with cited drill-down.",
+  "version": "0.3.0",
   "author": {
     "name": "JCodesMore",
     "url": "https://github.com/JCodesMore"
@@ -12,10 +12,11 @@
   "license": "Apache-2.0",
   "keywords": [
     "search",
+    "recall",
     "transcripts",
     "sessions",
-    "history",
-    "local",
-    "claude-code"
+    "claude-code",
+    "codex",
+    "opencode"
   ]
 }

@@ -1,20 +1,20 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-marketplace.json",
-  "name": "claude-search",
+  "name": "conversation-recall",
   "owner": {
     "name": "JCodesMore",
     "url": "https://github.com/JCodesMore"
   },
   "metadata": {
-    "description": "Local search across your Claude Code conversation history",
-    "version": "0.2.0"
+    "description": "Local cross-agent conversation recall",
+    "version": "0.3.0"
   },
   "plugins": [
     {
-      "name": "claude-search",
-      "source": ".",
-      "description": "Search your past Claude Code conversations — ranked results, resumable in one command",
-      "version": "0.2.0",
+      "name": "conversation-recall",
+      "source": "./",
+      "description": "Recall Claude Code, Codex, and OpenCode conversations locally.",
+      "version": "0.3.0",
       "strict": true
     }
   ]

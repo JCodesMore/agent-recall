@@ -1,2 +1,0 @@
-{"type":"user","sessionId":"00000000-0000-0000-0000-000000000005","uuid":"du1","parentUuid":null,"timestamp":"2026-01-01T12:40:00.000Z","cwd":"C:\\proj-d","message":{"role":"user","content":"Emoji search: 🚀 rocket and 日本語 text and €uros."}}
-{"type":"assistant","sessionId":"00000000-0000-0000-0000-000000000005","uuid":"da1","parentUuid":"du1","timestamp":"2026-01-01T12:41:00.000Z","cwd":"C:\\proj-d","message":{"role":"assistant","content":[{"type":"text","text":"Unicode round-trips fine — 🚀, 日本語, €."}]}}

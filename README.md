@@ -1,116 +1,131 @@
-<div align="center">
+# Agent Recall
 
-# Claude Search
+Local conversation recall across Claude Code, Codex, and OpenCode. Agent Recall incrementally indexes redacted user and assistant messages, then gives agents a small search-and-drill-down API instead of forcing users to copy context between chats.
 
-### Find any conversation you ever had with Claude Code — in seconds, all local
+## Why
 
-Ask *"where did I work out that postgres pool issue?"* and Claude searches every transcript on your machine, ranks the hits, and hands you a `claude --resume` you can paste straight back. No API key, no upload, no signup — your sessions never leave the laptop.
+Coding-agent history is split across provider-specific JSONL and SQLite stores. Agent Recall normalizes those stores locally so a new agent can find prior decisions, inspect the relevant turns, and cite exactly where the context came from.
 
-[Quick Start](#quick-start) · [Try it](#try-it) · [How it works](#how-it-works) · [More plugins](https://github.com/JCodesMore/jcodesmore-plugins)
+Nothing is uploaded. No API key or embedding service is required.
 
-</div>
+## Requirements
 
----
+- Node.js 22.13 or newer
+- Claude Code, Codex, or OpenCode local session history
 
-## Quick Start
+## Install The Skill
 
-**1. Install the plugin** — inside Claude Code, run:
+From a checkout:
 
+```bash
+node scripts/install.mjs
 ```
-/plugin marketplace add JCodesMore/jcodesmore-plugins
-/plugin install claude-search@jcodesmore-plugins
+
+This installs `conversation-recall` into both personal Agent Skills locations:
+
+- `~/.agents/skills/conversation-recall` for Codex and OpenCode
+- `~/.claude/skills/conversation-recall` for Claude Code
+
+Preview or remove the installation:
+
+```bash
+node scripts/install.mjs --dry-run
+node scripts/install.mjs --uninstall
 ```
 
-Then fully **restart Claude Code** (quit the app and reopen).
+Claude Code can also load this repository as a plugin:
 
-**2. That's it.** The first time a session starts, the indexer reads everything under `~/.claude/projects/` once. After that it only re-reads files that changed. No API key, no signup — just start asking.
+```text
+claude --plugin-dir /path/to/agent-recall
+```
 
-## Try it
+Restart clients that were already running when the skill was installed.
 
-Talk to Claude like a friend who remembers everything you've ever done together:
+### OpenCode Paste Preview
 
-- *"Search my sessions for the migration script we wrote last month."*
-- *"Find where I debugged that pgbouncer pool exhaustion."*
-- *"Look up my notes on tokio cancellation safety."*
-- *"What did I figure out about Next.js middleware?"*
-- *"Open a browser UI to browse my history."*
+To keep full multi-line pasted text visible in OpenCode instead of replacing it with `[Pasted ~N lines]`, add this to `~/.config/opencode/opencode.jsonc` and restart OpenCode:
 
-Each result comes with a `claude --resume <id>` command — paste it and you're back in that conversation, exactly where it ended.
+```json
+{
+  "experimental": {
+    "disable_paste_summary": true
+  }
+}
+```
 
-## What's inside
+## Agent CLI
 
-| Capability | Try saying |
+Every command has `--json` machine output. Search incrementally refreshes changed source files before querying.
+
+```bash
+node scripts/recall.mjs doctor --json
+node scripts/recall.mjs search --json --cwd . --limit 5 -- "database migration"
+node scripts/recall.mjs context --json <hit-id>
+node scripts/recall.mjs session --json <session-key>
+node scripts/recall.mjs transcript --json --limit 20 --offset 0 <session-key>
+node scripts/recall.mjs recent --json --cwd . --limit 10
+node scripts/recall.mjs status --json
+node scripts/recall.mjs sync --json
+```
+
+Run `node scripts/recall.mjs --help` for all options.
+
+## Search Model
+
+- SQLite FTS5 BM25 lexical search
+- Current-project-first workflow in the skill
+- AND matching with an OR fallback when all terms produce no results
+- One top hit per session by default
+- Bounded context and transcript pagination
+- Transcript completeness metadata for truncated or malformed source records
+- Provider, project, and time filters
+
+The first sync parses all supported stores. Later syncs compare source signatures and only re-read changed files or databases.
+
+## Sources
+
+| Provider | Default store |
 |---|---|
-| Ranked full-text search | *"Find sessions where I worked on JWT validation"* |
-| Filter by project | *"Search 'auth refactor' in the web-app project"* |
-| Resume any past session | *"Give me a resume command for the pgbouncer one"* |
-| Local web UI | *"Open the search UI in my browser"* |
-| Show only recent matches | *"What did I work on yesterday about Postgres?"* |
+| Claude Code | `~/.claude/projects/**/*.jsonl` |
+| Codex | `~/.codex/sessions/**/*.jsonl` and `~/.codex/archived_sessions` |
+| OpenCode | `${XDG_DATA_HOME:-~/.local/share}/opencode/opencode*.db` |
 
-## How it works
+OpenCode databases are opened read-only. Agent Recall queries only `session`, `message`, and `part`; credential and account tables are never enumerated.
 
-- **Local-only.** Reads `~/.claude/projects/**/*.jsonl` (the transcripts Claude Code already writes). Nothing is uploaded.
-- **Incremental.** Files unchanged since the last pass are skipped. The first index takes ~30 seconds on a large corpus; later runs are fast.
-- **Ranked.** BM25 with a small user-role boost and recency decay — so the message you wrote yourself ranks above tool output, and recent sessions rank above stale ones.
-- **Resumable.** Every result includes `claude --resume <session-id>`. Run it in the original project directory to pick the conversation back up.
-- **Zero deps.** Pure Node 20 stdlib. No native bindings, no install step, no npm packages.
+## Privacy
 
-## Try the CLI directly
+- The index remains on the local machine.
+- Only user and assistant conversational text is indexed by default.
+- System prompts, reasoning, tool calls, tool output, files, snapshots, and patches are excluded.
+- Common credentials, authorization headers, private keys, JWTs, and credentialed URLs are redacted before storage.
+- Search output hides source paths unless explicitly requested.
+- Recalled text is evidence, not executable instructions.
 
-If you want to run it outside Claude Code:
+The index location follows the platform application-data convention. Override it with `AGENT_RECALL_HOME`.
 
-```bash
-node scripts/search.mjs "your query here"
-node scripts/search.mjs --web              # opens local UI at 127.0.0.1
-node scripts/search.mjs --project foo bar  # filter by project name
-node scripts/search.mjs --json query       # machine-readable output
-```
+## Activity Labels
 
-<details>
-<summary><b>Where the index lives</b></summary>
+Agent Recall does not equate a recent file timestamp with a live process:
 
-The index is stored at `~/.claude-search/` (override with `CLAUDE_SEARCH_HOME`):
+| State | Meaning |
+|---|---|
+| `active` | A recent explicit lifecycle event exists |
+| `probably-active` | The source was just written, without lifecycle proof |
+| `recent` | Updated within 24 hours |
+| `inactive` | Archived or explicitly stopped |
+| `unknown` | No useful live signal |
 
-- `index.json` — postings offsets, document metadata, session metadata
-- `postings.ndjson` — one token per line; loaded on demand for each query
-- `docs.ndjson` — one message per line; loaded on demand for snippets
-- `manifest.json` — file signatures so we know what changed
+Each result includes confidence, observation time, and reason codes.
 
-To rebuild from scratch, delete the folder. The next session start (or any `/search`) will rebuild it.
-
-</details>
-
-<details>
-<summary><b>Advanced install (without the marketplace)</b></summary>
-
-```bash
-git clone https://github.com/JCodesMore/claude-search.git
-cd claude-search
-# Use directly from this clone:
-claude --plugin-dir ./claude-search
-```
-
-**Requirements:** Node.js ≥ 20.
-
-</details>
-
-<details>
-<summary><b>Run the tests</b></summary>
+## Development
 
 ```bash
 npm test
+npm run doctor
 ```
 
-35 tests covering the reader, indexer, searcher, formatter, and web server — all on synthetic JSONL fixtures, no fixtures from your real machine.
-
-</details>
+Tests use synthetic provider stores only. They do not read real transcripts.
 
 ## License
 
-[Apache License 2.0](LICENSE) — © 2026 JCodesMore
-
-> Search runs entirely on your local machine. No network calls, no telemetry, no third-party services.
-
----
-
-*Part of [jcodesmore-plugins](https://github.com/JCodesMore/jcodesmore-plugins).*
+[Apache License 2.0](LICENSE)
