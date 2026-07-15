@@ -1,7 +1,9 @@
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { APP, LIMITS, TOKENIZE } from './config.mjs';
 import { classifyActivity, latestActivityEvent } from './activity.mjs';
 import { displayPath } from './paths.mjs';
+import { adapterFor } from './sources/registry.mjs';
 import { openDatabase } from './storage/database.mjs';
 
 function clamp(value, fallback, max, min = 0) {
@@ -49,6 +51,26 @@ function parseJson(value, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function compactAttachment(row) {
+  const metadata = parseJson(row.metadata_json, {});
+  return {
+    attachmentKey: row.attachment_key,
+    ordinal: Number(row.ordinal),
+    kind: row.kind,
+    provider: row.provider,
+    mime: row.mime,
+    byteLength: Number(row.byte_length),
+    name: metadata.name || undefined,
+  };
+}
+
+function attachmentsForMessage(db, messageKey) {
+  return db.prepare(`
+    SELECT attachment_key, ordinal, kind, mime, byte_length, provider, metadata_json
+    FROM attachments WHERE message_key = ? ORDER BY ordinal
+  `).all(messageKey).map(compactAttachment);
 }
 
 function compactSession(row, db) {
@@ -163,6 +185,7 @@ export async function searchHistory(query, options = {}) {
       sequence: Number(row.sequence),
       score: Math.abs(Number(row.rank)),
       snippet: excerpt(row.text, tokens),
+      attachments: attachmentsForMessage(db, row.message_key),
     }));
     return {
       schemaVersion: APP.CLI_SCHEMA_VERSION,
@@ -215,6 +238,7 @@ export async function getContext(hitId, options = {}) {
         model: message.model,
         truncated: Boolean(parseJson(message.metadata_json, {}).truncated),
         matched: message.message_key === hitId,
+        attachments: attachmentsForMessage(db, message.message_key),
       })),
     };
   } finally {
@@ -240,6 +264,7 @@ export async function getSession(sessionKey, options = {}) {
       ...compactSession(row, db),
       sourcePath: options.includeSource ? displayPath(row.source_path) : undefined,
       metadata: parseJson(row.metadata_json, {}),
+      attachmentCount: Number(db.prepare('SELECT count(*) AS count FROM attachments WHERE session_key = ?').get(sessionKey)?.count || 0),
     };
   } finally {
     if (ownsDb) db.close();
@@ -300,6 +325,7 @@ export async function getTranscript(sessionKey, options = {}) {
         text: message.text,
         model: message.model,
         truncated: Boolean(parseJson(message.metadata_json, {}).truncated),
+        attachments: attachmentsForMessage(db, message.message_key),
       })),
     };
   } finally {
@@ -336,6 +362,90 @@ export async function recentSessions(options = {}) {
   }
 }
 
+export async function listAttachments(messageKey, options = {}) {
+  const db = options.db || await openDatabase();
+  const ownsDb = !options.db;
+  try {
+    const conditions = ['m.message_key = ?'];
+    const params = [messageKey];
+    if (options.provider) {
+      conditions.push('s.provider = ?');
+      params.push(options.provider);
+    }
+    if (options.cwd) addCwdCondition(conditions, params, 's.cwd', options.cwd);
+    const message = db.prepare(`
+      SELECT m.message_key FROM messages m JOIN sessions s USING(session_key)
+      WHERE ${conditions.join(' AND ')}
+    `).get(...params);
+    if (!message) return null;
+    const attachments = attachmentsForMessage(db, messageKey);
+    return { schemaVersion: APP.CLI_SCHEMA_VERSION, messageKey, count: attachments.length, attachments };
+  } finally {
+    if (ownsDb) db.close();
+  }
+}
+
+export async function getAttachmentData(attachmentKey, options = {}) {
+  const db = options.db || await openDatabase();
+  const ownsDb = !options.db;
+  try {
+    const conditions = ['a.attachment_key = ?'];
+    const params = [attachmentKey];
+    if (options.provider) {
+      conditions.push('s.provider = ?');
+      params.push(options.provider);
+    }
+    if (options.cwd) addCwdCondition(conditions, params, 's.cwd', options.cwd);
+    const row = db.prepare(`
+      SELECT a.*
+      FROM attachments a
+      JOIN messages m ON m.message_key = a.message_key AND m.session_key = a.session_key
+      JOIN sessions s ON s.session_key = m.session_key
+        AND s.provider = a.provider AND s.source_path = a.source_path
+      JOIN sources src ON src.source_path = s.source_path AND src.provider = s.provider
+      WHERE ${conditions.join(' AND ')}
+    `).get(...params);
+    if (!row) return null;
+    const stale = () => {
+      const error = new Error('The attachment source changed. Run agent-recall sync and retry with the new attachment key.');
+      error.code = 'STALE_ATTACHMENT';
+      throw error;
+    };
+    if (!row.sha256 || Number(row.byte_length) > LIMITS.ATTACHMENT_MAX_BYTES) stale();
+    const adapter = adapterFor(row.provider);
+    if (!adapter?.readAttachment) throw new Error(`Attachment retrieval is unavailable for provider: ${row.provider}`);
+    let result;
+    try {
+      result = await adapter.readAttachment({
+        sourcePath: row.source_path,
+        locator: parseJson(row.locator_json, {}),
+        mime: row.mime,
+      });
+    } catch (error) {
+      if (error?.code === 'INVALID_ATTACHMENT_DATA') stale();
+      throw error;
+    }
+    if (!result || !Buffer.isBuffer(result.data)) stale();
+    const digest = crypto.createHash('sha256').update(result.data).digest('hex');
+    if (
+      result.data.length !== Number(row.byte_length)
+      || result.data.length > LIMITS.ATTACHMENT_MAX_BYTES
+      || String(result.mime).toLowerCase() !== String(row.mime).toLowerCase()
+      || digest !== row.sha256
+    ) stale();
+    return {
+      schemaVersion: APP.CLI_SCHEMA_VERSION,
+      ...compactAttachment(row),
+      messageKey: row.message_key,
+      data: result.data,
+      mime: result.mime || row.mime,
+      sourcePath: row.source_path,
+    };
+  } finally {
+    if (ownsDb) db.close();
+  }
+}
+
 export async function recallStatus(options = {}) {
   const db = options.db || await openDatabase();
   const ownsDb = !options.db;
@@ -365,6 +475,7 @@ export async function recallStatus(options = {}) {
         WHERE substr(signature, -length(?)) <> ?
       `).get(`:policy=${APP.INDEX_POLICY_VERSION}`, `:policy=${APP.INDEX_POLICY_VERSION}`)?.count || 0),
       lastSyncAt: db.prepare('SELECT value FROM metadata WHERE key = ?').get('last_sync_at')?.value ?? null,
+      attachments: Number(db.prepare('SELECT count(*) AS count FROM attachments').get()?.count || 0),
       providers: providerCounts.map(row => ({
         provider: row.provider,
         sources: Number(sourceMap.get(row.provider)?.sources || 0),

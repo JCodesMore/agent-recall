@@ -31,6 +31,13 @@ const INSERT_MESSAGE = `
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
+const INSERT_ATTACHMENT = `
+  INSERT INTO attachments(
+    attachment_key, message_key, session_key, provider, native_id, ordinal,
+    kind, mime, byte_length, sha256, source_path, locator_json, metadata_json
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`;
+
 const AUTO_SYNC_LEASE_KEY = 'auto_sync_lease';
 
 function safeJson(value) {
@@ -46,6 +53,7 @@ function replaceSource(db, descriptor, parsed, indexedAt) {
   const insertSource = db.prepare(INSERT_SOURCE);
   const insertSession = db.prepare(INSERT_SESSION);
   const insertMessage = db.prepare(INSERT_MESSAGE);
+  const insertAttachment = db.prepare(INSERT_ATTACHMENT);
 
   withTransaction(db, () => {
     db.prepare('DELETE FROM sources WHERE source_path = ?').run(descriptor.path);
@@ -101,6 +109,24 @@ function replaceSource(db, descriptor, parsed, indexedAt) {
         message.sourceLocator ?? null,
         safeMetadataText(message.model),
         safeJson(redactValue(message.metadata)),
+      );
+    }
+
+    for (const attachment of parsed.attachments || []) {
+      insertAttachment.run(
+        attachment.attachmentKey,
+        attachment.messageKey,
+        attachment.sessionKey,
+        attachment.provider,
+        attachment.nativeId,
+        attachment.ordinal,
+        attachment.kind,
+        attachment.mime,
+        attachment.byteLength,
+        attachment.sha256,
+        descriptor.path,
+        safeJson(attachment.locator),
+        safeJson(redactValue(attachment.metadata)),
       );
     }
   });
@@ -192,6 +218,7 @@ export async function syncHistory({ providers, roots = {}, force = false, db: pr
     removed: 0,
     sessions: 0,
     messages: 0,
+    attachments: 0,
     redactions: 0,
     errors: [],
     providers: {},
@@ -252,10 +279,12 @@ export async function syncHistory({ providers, roots = {}, force = false, db: pr
       SELECT
         (SELECT count(*) FROM sessions) AS sessions,
         (SELECT count(*) FROM messages) AS messages,
+        (SELECT count(*) FROM attachments) AS attachments,
         (SELECT coalesce(sum(json_extract(metadata_json, '$.privacy.redactions')), 0) FROM messages) AS redactions
     `).get();
     stats.sessions = Number(counts.sessions);
     stats.messages = Number(counts.messages);
+    stats.attachments = Number(counts.attachments);
     stats.redactions = Number(counts.redactions);
     stats.ok = stats.errors.length === 0;
     db.prepare('INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)').run(

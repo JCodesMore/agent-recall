@@ -72,5 +72,14 @@ export async function* readJsonlRecords(file, diagnostics, options = {}) {
     if (parsed) yield parsed;
   }
 }
+
+export async function readJsonlRecordAt(file, targetLine) {
+  const diagnostics = emptyDiagnostics();
+  for await (const item of readJsonlRecords(file, diagnostics)) {
+    if (item.line === targetLine) return item.record;
+    if (item.line > targetLine) return null;
+  }
+  return null;
+}
 import fs from 'node:fs';
 import { LIMITS } from '../config.mjs';

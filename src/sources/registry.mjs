@@ -22,3 +22,7 @@ export function adaptersFor(providers) {
 export function supportedProviders() {
   return [...ADAPTERS.keys()];
 }
+
+export function adapterFor(provider) {
+  return ADAPTERS.get(provider) ?? null;
+}

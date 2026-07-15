@@ -1,6 +1,6 @@
 {
   "name": "@jcodesmore/agent-recall",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Local cross-agent conversation recall for Claude Code, Codex, and OpenCode.",
   "type": "module",
   "private": true,

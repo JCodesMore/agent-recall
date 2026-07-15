@@ -2,8 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { LIMITS, PATHS, PROVIDERS } from '../config.mjs';
+import { attachmentKey, decodeDataUrl, parseDataUrl } from '../model/attachments.mjs';
 import { asIso, messageKey, sessionKey, stableId } from '../model/ids.mjs';
-import { emptyDiagnostics, readJsonlRecords, sourceSignature } from './source-adapter.mjs';
+import { emptyDiagnostics, readJsonlRecordAt, readJsonlRecords, sourceSignature } from './source-adapter.mjs';
 
 const INJECTED_BLOCKS = [
   'system-reminder',
@@ -59,6 +60,17 @@ function contentText(content) {
     if (text.length >= cap) break;
   }
   return text;
+}
+
+function contentImages(content) {
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((block, blockIndex) => {
+    if (block?.type !== 'image' || block.source?.type !== 'base64') return [];
+    const mime = String(block.source.media_type || 'application/octet-stream').toLowerCase();
+    const parsed = parseDataUrl(`data:${mime};base64,${block.source.data || ''}`);
+    if (!parsed) return [];
+    return [{ blockIndex, mime: parsed.mime, byteLength: parsed.byteLength, sha256: parsed.sha256 }];
+  });
 }
 
 function truncate(text, diagnostics) {
@@ -154,6 +166,7 @@ export const claudeAdapter = {
     let updatedAt = null;
     const versions = new Set();
     const messages = [];
+    const attachments = [];
 
     const nativeMessageKeys = new Map();
     for await (const { record, line } of readJsonlRecords(sourcePath, diagnostics)) {
@@ -177,8 +190,9 @@ export const claudeAdapter = {
         continue;
       }
 
+      const images = contentImages(record.message?.content);
       const text = contentText(record.message?.content);
-      if (!text) {
+      if (!text && images.length === 0) {
         diagnostics.skipped += 1;
         continue;
       }
@@ -199,7 +213,7 @@ export const claudeAdapter = {
         sequence,
         timestamp,
         role,
-        contentType: 'text',
+        contentType: images.length && !text ? 'attachment' : 'text',
         text: truncate(text, diagnostics),
         sourcePath,
         sourceLocator: `line:${line}`,
@@ -210,6 +224,29 @@ export const claudeAdapter = {
           truncated,
         },
       });
+      for (const [ordinal, image] of images.entries()) {
+        const duplicate = images.slice(0, ordinal).filter(candidate => candidate.sha256 === image.sha256).length;
+        const nativeAttachmentId = `${image.sha256}:${duplicate}`;
+        attachments.push({
+          attachmentKey: attachmentKey(PROVIDERS.CLAUDE, messageNativeId, sourcePath, nativeAttachmentId),
+          messageKey: ownMessageKey,
+          sessionKey: ownSessionKey,
+          provider: PROVIDERS.CLAUDE,
+          nativeId: nativeAttachmentId,
+          ordinal,
+          kind: 'image',
+          mime: image.mime,
+          byteLength: image.byteLength,
+          sha256: image.sha256,
+          sourcePath,
+          locator: {
+            line,
+            blockIndex: image.blockIndex,
+            messageId: record.uuid ?? record.message?.id ?? null,
+          },
+          metadata: {},
+        });
+      }
       nativeMessageKeys.set(messageNativeId, ownMessageKey);
     }
 
@@ -248,6 +285,16 @@ export const claudeAdapter = {
       },
     };
 
-    return { sessions: [session], messages, diagnostics };
+    return { sessions: [session], messages, attachments, diagnostics };
+  },
+
+  async readAttachment(attachment) {
+    const record = await readJsonlRecordAt(attachment.sourcePath, attachment.locator.line);
+    const messageId = record?.uuid ?? record?.message?.id ?? null;
+    if (attachment.locator.messageId && String(messageId) !== String(attachment.locator.messageId)) return null;
+    const block = record?.message?.content?.[attachment.locator.blockIndex];
+    if (block?.type !== 'image' || block.source?.type !== 'base64') return null;
+    const mime = String(block.source.media_type || attachment.mime).toLowerCase();
+    return decodeDataUrl(`data:${mime};base64,${block.source.data || ''}`);
   },
 };

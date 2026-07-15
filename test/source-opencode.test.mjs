@@ -9,6 +9,7 @@ import { opencodeAdapter } from '../src/sources/opencode.mjs';
 
 let temp;
 let databasePath;
+const PNG_DATA = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 before(async () => {
   temp = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-recall-opencode-'));
@@ -72,6 +73,8 @@ before(async () => {
       JSON.stringify({ type: 'subtask', prompt: 'Delegate this prompt', time: { start: 1_700_000_001_200 } }));
     part.run('part-user-a', 'msg-1', 'ses-parent', 1_700_000_001_100, 1_700_000_001_100,
       JSON.stringify({ type: 'text', text: 'Find the regression', time: { start: 1_700_000_001_100 } }));
+    part.run('part-user-image', 'msg-1', 'ses-parent', 1_700_000_001_300, 1_700_000_001_300,
+      JSON.stringify({ type: 'file', mime: 'image/png', filename: 'fixture.png', url: `data:image/png;base64,${PNG_DATA}` }));
     part.run('part-reasoning', 'msg-2', 'ses-parent', 1_700_000_003_100, 1_700_000_003_100,
       JSON.stringify({ type: 'reasoning', text: 'REASONING_CANARY' }));
     part.run('part-tool', 'msg-2', 'ses-parent', 1_700_000_003_200, 1_700_000_003_200,
@@ -130,6 +133,9 @@ test('read reconstructs sessions and searchable messages without reading sensiti
   assert.equal(result.sessions.length, 2);
   assert.equal(result.messages.length, 4);
   assert.deepEqual(result.diagnostics, { malformed: 0, truncated: 1, skipped: 0 });
+  assert.equal(result.attachments.length, 1);
+  assert.equal(result.attachments[0].metadata.name, 'fixture.png');
+  assert.deepEqual(opencodeAdapter.readAttachment(result.attachments[0]).data, Buffer.from(PNG_DATA, 'base64'));
 
   const parent = result.sessions.find(session => session.nativeId === 'ses-parent');
   const child = result.sessions.find(session => session.nativeId === 'ses-child');

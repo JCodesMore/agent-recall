@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { LIMITS, PATHS, PROVIDERS } from '../config.mjs';
+import { attachmentKey, decodeDataUrl, parseDataUrl } from '../model/attachments.mjs';
 import { asIso, messageKey, sessionKey } from '../model/ids.mjs';
 import { emptyDiagnostics, sourceSignature } from './source-adapter.mjs';
 
@@ -174,7 +175,8 @@ function readRows(db, sourcePath) {
 }
 
 function normalizeParts(rows, diagnostics) {
-  const byMessage = new Map();
+  const textByMessage = new Map();
+  const attachmentsByMessage = new Map();
   for (const row of rows) {
     const data = parseData(row.data, diagnostics);
     if (!data) continue;
@@ -186,6 +188,23 @@ function normalizeParts(rows, diagnostics) {
     }
 
     const type = String(firstDefined(data.type, row.type, '')).toLowerCase();
+    if (type === 'file') {
+      const parsed = parseDataUrl(data.url);
+      if (!parsed) continue;
+      const attachments = attachmentsByMessage.get(String(messageId)) ?? [];
+      attachments.push({
+        id: String(id),
+        mime: parsed.mime,
+        byteLength: parsed.byteLength,
+        sha256: parsed.sha256,
+        messageId: String(messageId),
+        sessionId: String(firstDefined(row.session_id, row.sessionId, data.sessionID, data.sessionId) ?? ''),
+        name: firstDefined(data.filename, data.name) ?? null,
+        sortTime: numericTime(dataTime(data, row)),
+      });
+      attachmentsByMessage.set(String(messageId), attachments);
+      continue;
+    }
     let text = null;
     if (type === 'text' && typeof data.text === 'string') text = data.text;
     if (type === 'subtask' && typeof data.prompt === 'string') text = data.prompt;
@@ -193,15 +212,16 @@ function normalizeParts(rows, diagnostics) {
 
     const time = dataTime(data, row);
     const part = { id, type, text, sortTime: numericTime(time) };
-    const parts = byMessage.get(String(messageId)) ?? [];
+    const parts = textByMessage.get(String(messageId)) ?? [];
     parts.push(part);
-    byMessage.set(String(messageId), parts);
+    textByMessage.set(String(messageId), parts);
   }
-  for (const parts of byMessage.values()) parts.sort(compareTimed);
-  return byMessage;
+  for (const parts of textByMessage.values()) parts.sort(compareTimed);
+  for (const attachments of attachmentsByMessage.values()) attachments.sort(compareTimed);
+  return { textByMessage, attachmentsByMessage };
 }
 
-function normalizeMessages(rows, partsByMessage, knownSessions, sourcePath, diagnostics) {
+function normalizeMessages(rows, textByMessage, attachmentsByMessage, knownSessions, sourcePath, diagnostics) {
   const parsed = [];
   for (const row of rows) {
     const data = parseData(row.data, diagnostics);
@@ -212,8 +232,9 @@ function normalizeMessages(rows, partsByMessage, knownSessions, sourcePath, diag
       continue;
     }
 
-    const parts = partsByMessage.get(String(id)) ?? [];
-    if (parts.length === 0) {
+    const parts = textByMessage.get(String(id)) ?? [];
+    const attachmentParts = attachmentsByMessage.get(String(id)) ?? [];
+    if (parts.length === 0 && attachmentParts.length === 0) {
       diagnostics.skipped += 1;
       continue;
     }
@@ -239,9 +260,10 @@ function normalizeMessages(rows, partsByMessage, knownSessions, sourcePath, diag
       role,
       parentId: parentId ? String(parentId) : null,
       model: modelName(data, row),
-      contentType: parts.every(part => part.type === 'subtask') ? 'subtask' : 'text',
+      contentType: parts.length === 0 ? 'attachment' : parts.every(part => part.type === 'subtask') ? 'subtask' : 'text',
       text,
       parts,
+      attachmentParts,
       data,
       truncated,
     });
@@ -258,9 +280,12 @@ function normalizeMessages(rows, partsByMessage, knownSessions, sourcePath, diag
   for (const { item, sequence } of sequenced) {
     if (!keysByNativeId.has(item.id)) keysByNativeId.set(item.id, messageKey(PROVIDER, item.id, sourcePath, sequence));
   }
-  return sequenced.map(({ item, sequence }) => {
-    return {
-      messageKey: messageKey(PROVIDER, item.id, sourcePath, sequence),
+  const messages = [];
+  const attachments = [];
+  for (const { item, sequence } of sequenced) {
+    const ownMessageKey = messageKey(PROVIDER, item.id, sourcePath, sequence);
+    messages.push({
+      messageKey: ownMessageKey,
       sessionKey: sessionKey(PROVIDER, item.nativeSessionId, sourcePath),
       nativeId: item.id,
       parentMessageKey: item.parentId ? keysByNativeId.get(item.parentId) ?? null : null,
@@ -276,11 +301,33 @@ function normalizeMessages(rows, partsByMessage, knownSessions, sourcePath, diag
         ['agent', item.data.agent],
         ['mode', item.data.mode],
         ['providerId', providerId(item.data)],
-        ['partIds', item.parts.map(part => String(part.id))],
+        ['partIds', [...item.parts, ...item.attachmentParts].map(part => String(part.id))],
         ['truncated', item.truncated || undefined],
       ]),
-    };
-  });
+    });
+    for (const [ordinal, attachment] of item.attachmentParts.entries()) {
+      attachments.push({
+        attachmentKey: attachmentKey(PROVIDER, item.id, sourcePath, attachment.id),
+        messageKey: ownMessageKey,
+        sessionKey: sessionKey(PROVIDER, item.nativeSessionId, sourcePath),
+        provider: PROVIDER,
+        nativeId: attachment.id,
+        ordinal,
+        kind: attachment.mime.startsWith('image/') ? 'image' : 'file',
+        mime: attachment.mime,
+        byteLength: attachment.byteLength,
+        sha256: attachment.sha256,
+        sourcePath,
+        locator: {
+          partId: attachment.id,
+          messageId: attachment.messageId,
+          sessionId: attachment.sessionId,
+        },
+        metadata: attachment.name ? { name: String(attachment.name) } : {},
+      });
+    }
+  }
+  return { messages, attachments };
 }
 
 function normalizeSessions(rows, messages, sourcePath, diagnostics) {
@@ -358,19 +405,40 @@ function read(descriptorValue) {
     const knownSessions = new Set(
       rows.sessions.map(row => firstDefined(row.id, row.session_id, row.sessionId)).filter(Boolean).map(String),
     );
-    const partsByMessage = normalizeParts(rows.parts, diagnostics);
-    const messages = normalizeMessages(
+    const { textByMessage, attachmentsByMessage } = normalizeParts(rows.parts, diagnostics);
+    const normalized = normalizeMessages(
       rows.messages,
-      partsByMessage,
+      textByMessage,
+      attachmentsByMessage,
       knownSessions,
       sourcePath,
       diagnostics,
     );
-    const sessions = normalizeSessions(rows.sessions, messages, sourcePath, diagnostics);
-    return { sessions, messages, diagnostics };
+    const sessions = normalizeSessions(rows.sessions, normalized.messages, sourcePath, diagnostics);
+    return { sessions, messages: normalized.messages, attachments: normalized.attachments, diagnostics };
   } finally {
     db.close();
   }
 }
 
-export const opencodeAdapter = Object.freeze({ provider: PROVIDER, discover, read });
+function readAttachment(attachment) {
+  const db = new DatabaseSync(attachment.sourcePath, { readOnly: true });
+  try {
+    const row = db.prepare('SELECT message_id, session_id, data FROM part WHERE id = ?').get(attachment.locator.partId);
+    if (!row) return null;
+    if (String(row.message_id) !== String(attachment.locator.messageId)) return null;
+    if (attachment.locator.sessionId && String(row.session_id) !== String(attachment.locator.sessionId)) return null;
+    let data;
+    try {
+      data = JSON.parse(row.data);
+    } catch {
+      return null;
+    }
+    if (data.type !== 'file') return null;
+    return decodeDataUrl(data.url);
+  } finally {
+    db.close();
+  }
+}
+
+export const opencodeAdapter = Object.freeze({ provider: PROVIDER, discover, read, readAttachment });

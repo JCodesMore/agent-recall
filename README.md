@@ -63,6 +63,8 @@ node scripts/recall.mjs search --json --cwd . --limit 5 -- "database migration"
 node scripts/recall.mjs context --json <hit-id>
 node scripts/recall.mjs session --json <session-key>
 node scripts/recall.mjs transcript --json --limit 20 --offset 0 <session-key>
+node scripts/recall.mjs attachments --json <message-key>
+node scripts/recall.mjs attachment --json --output ./attachment.png <attachment-key>
 node scripts/recall.mjs recent --json --cwd . --limit 10
 node scripts/recall.mjs status --json
 node scripts/recall.mjs sync --json
@@ -81,6 +83,12 @@ Run `node scripts/recall.mjs --help` for all options.
 - Provider, project, and time filters
 
 The first sync parses all supported stores. Later syncs compare source signatures and only re-read changed files or databases.
+
+Search, context, and transcript results include attachment descriptors when a supported message has an attachment. Claude Code support covers inline base64 image blocks, Codex support covers user `input_image` base64 data URLs, and OpenCode support covers `file` parts with base64 data URLs. Remote URLs are not fetched.
+
+`attachments` lists descriptors for one message. `attachment` writes the original bytes to a new local file with private permissions; it refuses existing files, provider source stores, and the Agent Recall database. Delete temporary extractions after inspection.
+
+Individual attachments are limited to 16 MiB. Oversized or unsupported attachment forms are omitted rather than fetched or partially decoded.
 
 The Claude plugin also checks freshness on session start, prompt submission, and stop. If the last completed sync is at least 10 minutes old, the next hook runs an incremental refresh. A short lease prevents overlapping hook events from starting duplicate refreshes. Search and recent still refresh immediately before querying.
 

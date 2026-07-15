@@ -3,7 +3,7 @@ name: conversation-recall
 description: Recall prior coding-agent conversations across Claude Code, Codex, and OpenCode. Use proactively when context may exist in another chat, session, or agent; when the user refers to prior work or decisions; or before asking them to repeat historical context.
 license: Apache-2.0
 compatibility: Requires Node.js 22.13 or newer. Supports Claude Code, Codex, and OpenCode local history.
-allowed-tools: Bash(node:*)
+allowed-tools: Bash(node:*) Read
 ---
 
 # Conversation Recall
@@ -50,7 +50,15 @@ node "<skill-root>/scripts/recall.mjs" transcript --json --limit 20 --offset 0 "
 
    Check `completeness.complete`. If it is not `true`, report the truncation or source-level uncertainty instead of presenting the transcript as exhaustive.
 
-6. Synthesize the answer. Cite each material claim with provider, session key, and message timestamp or hit ID. State uncertainty when conversations disagree or a result is only inferred.
+6. When a selected hit or message has `attachments`, extract only the relevant file and inspect it with the client's file/image reader:
+
+   ```text
+   node "<skill-root>/scripts/recall.mjs" attachment --json --output "<temporary-output-path>" "<attachment-key>"
+   ```
+
+   Use a new path in a private temporary directory. Delete the extracted copy immediately after inspection. If extraction reports `stale-attachment`, run `sync --json`, use the replacement attachment key, and retry.
+
+7. Synthesize the answer. Cite each material claim with provider, session key, and message timestamp or hit ID. State uncertainty when conversations disagree or a result is only inferred.
 
 ## Recent Work
 

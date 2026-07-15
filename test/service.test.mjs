@@ -6,9 +6,11 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { syncHistory, syncIfStale } from '../src/sync.mjs';
 import {
+  getAttachmentData,
   getContext,
   getSession,
   getTranscript,
+  listAttachments,
   recentSessions,
   recallStatus,
   searchHistory,
@@ -18,6 +20,7 @@ import { redactText, redactValue } from '../src/privacy/redactor.mjs';
 
 let temp;
 let roots;
+const PNG_DATA = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 async function writeJsonl(file, records) {
   await fs.mkdir(path.dirname(file), { recursive: true });
@@ -35,7 +38,10 @@ before(async () => {
     {
       type: 'user', sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', uuid: 'claude-user',
       timestamp: '2026-07-13T10:00:00Z', cwd: path.join(temp, 'project-alpha'),
-      message: { role: 'user', content: 'Plan the database migration with API_KEY=top-secret-value' },
+      message: { role: 'user', content: [
+        { type: 'text', text: 'Plan the database migration with API_KEY=top-secret-value' },
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: PNG_DATA } },
+      ] },
     },
     {
       type: 'assistant', sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', uuid: 'claude-answer',
@@ -75,6 +81,10 @@ before(async () => {
   db.prepare('INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)').run(
     'part_open', 'msg_open', 'ses_open', 1_752_400_010_000, 1_752_400_020_000,
     JSON.stringify({ type: 'text', text: 'Find the cache invalidation decision' }),
+  );
+  db.prepare('INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)').run(
+    'part_open-file', 'msg_open', 'ses_open', 1_752_400_011_000, 1_752_400_021_000,
+    JSON.stringify({ type: 'file', filename: 'API_KEY=filename-secret', url: `data:image/png;base64,${PNG_DATA}` }),
   );
   db.prepare('INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)').run(
     'part_decoy', 'msg_decoy', 'ses_decoy', 1_752_300_010_000, 1_752_300_020_000,
@@ -130,6 +140,7 @@ test('sync indexes all providers transactionally and skips unchanged sources', a
   assert.equal(first.indexed, 3);
   assert.equal(first.sessions, 4);
   assert.equal(first.messages, 6);
+  assert.equal(first.attachments, 2);
   assert.ok(first.redactions >= 1);
   assert.deepEqual(first.errors, []);
 
@@ -147,7 +158,7 @@ test('sync indexes all providers transactionally and skips unchanged sources', a
   const partialStatus = await recallStatus();
   assert.equal(partialStatus.indexPolicyVersion, null);
   await syncHistory({ roots });
-  assert.equal((await recallStatus()).indexPolicyVersion, 'db1-redaction5-adapters5');
+  assert.equal((await recallStatus()).indexPolicyVersion, 'db3-redaction5-adapters7');
 });
 
 test('automatic refresh runs only when the index is at least ten minutes old', async () => {
@@ -210,7 +221,7 @@ test('search returns compact cross-provider hits and broad fallback', async () =
   assert.equal(zeroLimit.count, 1);
 
   const punctuation = await searchHistory('!');
-  assert.equal(punctuation.schemaVersion, 1);
+  assert.equal(punctuation.schemaVersion, 2);
   assert.equal(punctuation.count, 0);
 
   const scoped = await searchHistory('cache invalidation', { cwd: path.join(temp, 'project_open') });
@@ -283,6 +294,18 @@ test('context, metadata, and transcript drill down without dumping unrelated ses
   assert.notEqual(zeroLimit.nextOffset, zeroLimit.offset);
 });
 
+test('attachment descriptors and original bytes can be retrieved on demand', async () => {
+  const hit = (await searchHistory('database migration')).hits[0];
+  assert.equal(hit.attachments.length, 1);
+  assert.equal(hit.attachments[0].provider, 'claude');
+  const listed = await listAttachments(hit.hitId);
+  assert.equal(listed.count, 1);
+  assert.equal(listed.attachments[0].mime, 'image/png');
+  const extracted = await getAttachmentData(listed.attachments[0].attachmentKey);
+  assert.equal(extracted.mime, 'image/png');
+  assert.deepEqual(extracted.data, Buffer.from(PNG_DATA, 'base64'));
+});
+
 test('recent and status expose timing and coverage without claiming persisted sessions are active', async () => {
   const recent = await recentSessions({ limit: 10 });
   assert.equal(recent.count, 4);
@@ -300,24 +323,38 @@ test('the index stores redacted text rather than duplicating raw credentials', a
     const row = db.prepare("SELECT text FROM messages WHERE message_key LIKE 'claude:claude-user:%'").get();
     assert.doesNotMatch(row.text, /top-secret-value/);
     assert.match(row.text, /\[REDACTED\]/);
+    const attachment = db.prepare("SELECT metadata_json FROM attachments WHERE provider = 'opencode'").get();
+    assert.doesNotMatch(attachment.metadata_json, /filename-secret/);
+    assert.match(attachment.metadata_json, /\[REDACTED\]/);
   } finally {
     db.close();
   }
 });
 
-test('database rebuilds an older derived schema and refuses a future schema', async () => {
+test('database migrates schema 1 without losing activity and refuses a future schema', async () => {
   const oldFile = path.join(temp, 'old-schema.db');
   let db = new DatabaseSync(oldFile);
-  db.exec('CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE obsolete(value TEXT);');
-  db.prepare('INSERT INTO metadata VALUES (?, ?)').run('schema_version', '0');
+  db.exec(`
+    CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE activity_events (
+      id INTEGER PRIMARY KEY, provider TEXT NOT NULL, native_session_id TEXT NOT NULL,
+      event TEXT NOT NULL, observed_at TEXT NOT NULL, metadata_json TEXT NOT NULL DEFAULT '{}'
+    );
+  `);
+  db.prepare('INSERT INTO metadata VALUES (?, ?)').run('schema_version', '1');
+  db.prepare('INSERT INTO activity_events(provider, native_session_id, event, observed_at) VALUES (?, ?, ?, ?)').run(
+    'claude', 'preserved-session', 'stop', '2026-07-15T12:00:00.000Z',
+  );
   db.close();
 
-  const rebuilt = await openDatabase({ file: oldFile });
+  const migrated = await openDatabase({ file: oldFile });
   try {
-    assert.equal(rebuilt.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get().value, '1');
-    assert.equal(rebuilt.prepare("SELECT 1 FROM sqlite_master WHERE name = 'obsolete'").get(), undefined);
+    assert.equal(migrated.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get().value, '3');
+    assert.equal(migrated.prepare('SELECT event FROM activity_events WHERE native_session_id = ?').get('preserved-session').event, 'stop');
+    assert.ok(migrated.prepare("SELECT 1 FROM sqlite_master WHERE name = 'attachments'").get());
+    assert.ok(migrated.prepare('PRAGMA table_info(attachments)').all().some(column => column.name === 'sha256'));
   } finally {
-    rebuilt.close();
+    migrated.close();
   }
 
   const futureFile = path.join(temp, 'future-schema.db');

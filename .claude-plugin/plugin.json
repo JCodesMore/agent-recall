@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "conversation-recall",
   "description": "Recall local Claude Code, Codex, and OpenCode conversations with cited drill-down.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": {
     "name": "JCodesMore",
     "url": "https://github.com/JCodesMore"
