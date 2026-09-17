@@ -158,7 +158,7 @@ test('sync indexes all providers transactionally and skips unchanged sources', a
   const partialStatus = await recallStatus();
   assert.equal(partialStatus.indexPolicyVersion, null);
   await syncHistory({ roots });
-  assert.equal((await recallStatus()).indexPolicyVersion, 'db3-redaction5-adapters8');
+  assert.equal((await recallStatus()).indexPolicyVersion, 'db3-redaction5-adapters9');
 });
 
 test('automatic refresh runs only when the index is at least ten minutes old', async () => {

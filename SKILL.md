@@ -1,6 +1,6 @@
 ---
 name: agent-recall
-description: Use Agent Recall to find prior coding-agent conversations across Claude Code, Codex, and OpenCode. Use proactively when context may exist in another chat, session, or agent; when the user refers to prior work or decisions; or before asking them to repeat historical context.
+description: Find prior conversations across Claude Code, Codex, and OpenCode, and restore selected Codex tasks. Use when useful context may exist in another chat or agent, the user refers to earlier work, or before asking them to repeat context.
 argument-hint: <query>
 user-invocable: true
 license: Apache-2.0
@@ -61,6 +61,19 @@ node "<skill-root>/scripts/recall.mjs" transcript --json --limit 20 --offset 0 "
    Use a new path in a private temporary directory. Delete the extracted copy immediately after inspection. If extraction reports `stale-attachment`, run `sync --json`, use the replacement attachment key, and retry.
 
 7. Synthesize the answer. Cite each material claim with provider, session key, and message timestamp or hit ID. State uncertainty when conversations disagree or a result is only inferred.
+
+## Restore or Open in Codex Desktop
+
+When the user asks to restore, reopen, or return to a Codex conversation:
+
+1. Resolve the Recall hit with `session --json "<session-key>"`. Continue only when `provider` is `codex`; use its exact `nativeId` as the desktop `threadId`.
+2. Read that task with the Codex app's `read_thread` tool to confirm its current title and `hostId`. Treat `metadata.parentNativeId` as a different task; if both parent and child are plausible, ask the user which one they want.
+3. Check the live archive list on that host, following its pagination. If the requested task is archived, call `set_thread_archived` with its explicit `threadId`, `hostId`, and `archived: false`.
+4. Open the same task with `navigate_to_codex_page`. Report unarchive and navigation separately if either fails.
+
+Recall metadata can become stale, so the app is authoritative for title and archive state. A `codex://threads/<threadId>` link opens a task but does not unarchive it. Keep the verified native ID after restoration; if the rollout moved, run `sync --json` before searching again.
+
+If the Codex app tools are unavailable, explain that desktop restoration is unavailable in this client. The CLI `resume` field is not desktop navigation.
 
 ## Recent Work
 

@@ -2,23 +2,34 @@
 
 # Agent Recall
 
-### Find any conversation you've had with Claude Code, Codex, or OpenCode
+### Give your AI agents memory across chats
 
-Ask *"where did we figure out that auth bug?"* and your current agent searches your past coding chats across all three tools, then pulls the relevant messages into your new chat. Start fresh, switch agents, or come back weeks later without explaining everything again.
+Search past conversations from Claude Code, Codex, and OpenCode—then bring the useful context into whatever you are working on now.
 
-[![Discord](https://img.shields.io/badge/Join_the_community-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/hrTSX5yTpB)
+[![Stars](https://img.shields.io/github/stars/JCodesMore/agent-recall?style=flat)](https://github.com/JCodesMore/agent-recall/stargazers)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/hrTSX5yTpB)
 
-[Quick Start](#quick-start) · [Try it](#try-it) · [Privacy](#private-by-default) · [More plugins](https://github.com/JCodesMore/jcodesmore-plugins)
+[Get started](#get-started) · [See what it can do](#what-can-it-do) · [Privacy](#private-by-default)
 
 </div>
 
 ---
 
-## Quick Start
+## Get started
 
-**Requires [Node.js](https://nodejs.org/) 22.13 or newer.** Follow the section for each agent where you want to use it.
+Requires [Node.js](https://nodejs.org/) 22.13 or newer.
 
-### Claude Code
+Give this to an AI coding agent with terminal access:
+
+> Install https://github.com/JCodesMore/agent-recall on this machine.
+
+Restart the agent after installation. That is it—you can ask naturally whenever an older conversation would help.
+
+<details>
+<summary><b>Prefer to install it yourself?</b></summary>
+
+### Claude Code plugin
 
 Run these inside Claude Code:
 
@@ -27,68 +38,58 @@ Run these inside Claude Code:
 /plugin install agent-recall@jcodesmore-plugins
 ```
 
-Fully restart Claude Code so the new skill loads.
-
-### Codex, OpenCode, or a standalone install
-
-From a terminal:
+### Standalone skill
 
 ```bash
 git clone https://github.com/JCodesMore/agent-recall.git
 cd agent-recall
-node scripts/install.mjs --agents-only
+node scripts/install.mjs
 ```
 
-Restart Codex or OpenCode if it was already running.
+Use `node scripts/install.mjs --agents-only` to install for Codex and OpenCode without adding the standalone Claude Code skill.
 
-**That's it.** Invoke Agent Recall directly, followed by your query:
+</details>
 
-| Agent | Invocation |
-|---|---|
-| Claude Code plugin | `/agent-recall:agent-recall <query>` |
-| Claude Code standalone skill | `/agent-recall <query>` |
-| Codex | `$agent-recall <query>` |
-| OpenCode | `Use the agent-recall skill: <query>` |
+## What can it do?
 
-The first search builds a private local index; later searches refresh only what changed.
+These are the kinds of requests Agent Recall is built for:
 
-## Try it
+> **“/agent-recall find how we designed the UI/UX for our last project, so we can do it again for this one.”**
 
-Replace `<query>` with something like:
+> **“/agent-recall catch me up on everything we changed in the last 24 hours across all my agents.”**
 
-- *"What did we do in the past 24 hours?"*
-- *"Where did we fix that Postgres connection issue?"*
-- *"What did we decide about the new auth flow?"*
-- *"Find where I compared those proxy APIs and summarize the result."*
-- *"Catch me up on this project from yesterday."*
-- *"What did I discuss in Codex about this feature last week?"*
-- *"Find where we debugged the checkout page and show me the screenshot I shared."*
+> **“/agent-recall find how we fixed this same bug before and apply the fix here.”**
 
-You do not need to remember which agent you used, what the chat was called, or where the session file lives. Just describe what you remember.
+> **“/agent-recall find the screenshot I shared when we designed this page.”**
 
-One question can search all three chat histories. Results show the app, project, time, and surrounding messages, so you can see the earlier decision in context. Your agent can also catch you up on recent sessions and reopen supported local images or files from a matching chat.
+> **“/agent-recall find the chat where we stopped building this feature, then tell me what is finished and what is left.”**
 
-Attachment support covers inline images from Claude Code, input images from Codex, and locally stored OpenCode file parts. It does not download files from remote URLs.
+> **“/agent-recall find and reopen my old Codex conversation about Spanish practice.”**
+
+You do not need to remember which agent you used, the chat title, or where its history is stored. Describe what you remember and Agent Recall searches your local Claude Code, Codex, and OpenCode conversations for the relevant context.
+
+It can also recover supported images and files from old chats. In Codex desktop, it can restore an archived task and open the original conversation.
 
 ## Private by default
 
-Searching and indexing happen on your computer. Agent Recall does not upload your chat history to its own server, and you do not need a separate API key, account, or embedding service.
+Your searchable index stays on your computer. Agent Recall does not upload your history to its own service and does not need an account, API key, or embedding service.
 
-Only user and assistant conversation text, including supported subagent chats, is indexed by default. System prompts, private reasoning, tool logs, patches, and other background data are skipped. Common credentials and private keys are redacted before text reaches the index.
+It indexes user and assistant conversation text—not system prompts, private reasoning, tool logs, or patches. Common credentials and private keys are redacted before text enters the index. Attachments are extracted only when requested.
 
-When your agent opens a matching excerpt or attachment, that content is handled by the AI service you are currently using, just like anything else you type or attach in that chat.
+<details>
+<summary><b>How it works</b></summary>
 
-## How it works
+The first search builds a local SQLite index. Later searches refresh only the history that changed. Results include the source agent, project, time, and surrounding messages so your current agent can use the earlier work in context.
 
-The first search reads your existing chat history. Later searches only refresh files that changed. Your agent starts with a few likely matches, opens the surrounding messages when needed, and can pull a longer transcript or an attached image.
+Default history locations:
 
-| App | Conversation history read by default |
+| App | Conversation history |
 |---|---|
 | Claude Code | `~/.claude/projects/**/*.jsonl` |
 | Codex | `~/.codex/sessions/**/*.jsonl` and `~/.codex/archived_sessions` |
 | OpenCode | `${XDG_DATA_HOME:-~/.local/share}/opencode/opencode*.db` |
 
-OpenCode databases are opened read-only. Credential and account tables are never read.
+</details>
 
 <details>
 <summary><b>Use the CLI directly</b></summary>
@@ -108,53 +109,13 @@ node scripts/recall.mjs status --json
 node scripts/recall.mjs sync --json
 ```
 
-Run `node scripts/recall.mjs --help` for all options.
-
-</details>
-
-<details>
-<summary><b>Search and attachment details</b></summary>
-
-- Search uses local SQLite FTS5 ranking with current-project-first behavior.
-- If every search term does not appear together, Agent Recall retries with a broader match.
-- Results are limited and grouped by conversation so one long chat does not crowd out everything else.
-- Context windows and transcripts are bounded and paginated.
-- Claude Code inline images, Codex input images, and OpenCode base64 file parts can be recovered on demand.
-- Remote attachment URLs are never fetched.
-- Individual attachments are limited to 16 MiB and are written only to a new local file you choose.
-
-The local index follows your operating system's application-data convention. Set `AGENT_RECALL_HOME` to override it.
-
-</details>
-
-<details>
-<summary><b>Install or remove the standalone skill</b></summary>
-
-From a checkout:
-
-```bash
-node scripts/install.mjs                 # Claude Code, Codex, and OpenCode
-node scripts/install.mjs --agents-only   # Codex and OpenCode only
-node scripts/install.mjs --dry-run
-node scripts/install.mjs --uninstall
-```
-
-This installs `agent-recall` into:
-
-- `~/.agents/skills/agent-recall` for Codex and OpenCode
-- `~/.claude/skills/agent-recall` for Claude Code
-
-Claude Code can also load the checkout directly:
-
-```text
-claude --plugin-dir /path/to/agent-recall
-```
+Run `node scripts/recall.mjs --help` for every option. Set `AGENT_RECALL_HOME` to choose a different index location.
 
 </details>
 
 ## Community
 
-[**Discord**](https://discord.gg/babcVNJBet) · [**Issues**](https://github.com/JCodesMore/agent-recall/issues) · [**More plugins**](https://github.com/JCodesMore/jcodesmore-plugins)
+[**Discord**](https://discord.gg/hrTSX5yTpB) · [**Issues**](https://github.com/JCodesMore/agent-recall/issues) · [**More plugins**](https://github.com/JCodesMore/jcodesmore-plugins)
 
 ## Development
 
@@ -163,12 +124,8 @@ npm test
 npm run doctor
 ```
 
-Tests use synthetic conversation history only. They never read your real chats.
+Tests use synthetic conversation history only.
 
 ## License
 
-[Apache License 2.0](LICENSE) - © 2026 JCodesMore
-
----
-
-*Part of [jcodesmore-plugins](https://github.com/JCodesMore/jcodesmore-plugins).*
+[Apache License 2.0](LICENSE) © 2026 JCodesMore
