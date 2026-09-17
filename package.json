@@ -1,6 +1,6 @@
 {
   "name": "@jcodesmore/agent-recall",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Let your AI agents find any conversation you've had across Claude Code, Codex, and OpenCode.",
   "type": "module",
   "private": true,

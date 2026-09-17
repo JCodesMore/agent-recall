@@ -187,6 +187,7 @@ export const codexAdapter = {
     const stat = await fs.stat(sourcePath);
 
     let sessionMeta = {};
+    let owningNativeId = null;
     let cwd = null;
     let gitBranch = null;
     let model = null;
@@ -203,6 +204,11 @@ export const codexAdapter = {
       updatedAt = maxIso(updatedAt, timestamp);
 
       if (record.type === 'session_meta') {
+        const metadataId = payload.id ?? payload.session_id;
+        // Forks/subagents may include the parent's session_meta after their own.
+        // Only metadata belonging to the first identified session may update it.
+        if (owningNativeId !== null && metadataId !== owningNativeId) continue;
+        owningNativeId ??= metadataId ?? null;
         sessionMeta = { ...sessionMeta, ...payload };
         cwd = payload.cwd ?? cwd;
         gitBranch = payload.git?.branch ?? payload.git_branch ?? gitBranch;
@@ -262,7 +268,7 @@ export const codexAdapter = {
       }
     }
 
-    const nativeId = sessionMeta.id ?? sessionMeta.session_id ?? idFromFilename(sourcePath);
+    const nativeId = owningNativeId ?? idFromFilename(sourcePath);
     let selectedCandidates;
     if (sawResponseMessage) {
       selectedCandidates = [
@@ -348,6 +354,9 @@ export const codexAdapter = {
         cliVersion: sessionMeta.cli_version ?? null,
         modelProvider: sessionMeta.model_provider ?? null,
         source: sessionMeta.source ?? null,
+        parentNativeId: sessionMeta.forked_from_id
+          ?? sessionMeta.source?.subagent?.thread_spawn?.parent_thread_id
+          ?? null,
       },
     };
 

@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-- Rewrote the README and public descriptions around the cross-agent search benefit.
+## 0.6.0
+
+- Fixed Codex parent/child identity so Agent Recall opens the conversation that actually matched.
+- Added native restore and open support for archived Codex desktop tasks.
+- Rewrote the README around practical, natural-language use cases.
 - Added `--agents-only` installation for Codex and OpenCode users without Claude Code.
 
 ## 0.5.0
