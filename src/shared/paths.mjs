@@ -43,6 +43,8 @@ export function sourceRoots() {
     codexSessionIndex: path.join(codexHome, 'session_index.jsonl'),
     opencodeHome: path.join(dataHome, 'opencode'),
     cursorProjects: path.join(home, '.cursor', 'projects'),
+    cursorChats: path.join(home, '.cursor', 'chats'),
+    cursorState: path.join(appDataDir(), 'Cursor', 'User', 'globalStorage', 'state.vscdb'),
   };
 }
 
