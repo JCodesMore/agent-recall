@@ -211,26 +211,26 @@ export const cursorProvider = {
 
   async discover(roots) {
     const cliChats = await cliChatIds(roots.cursorChats);
-    const sources = [];
-    for (const project of await listDir(roots.cursorProjects)) {
-      if (!project.isDirectory()) continue;
+    const projects = (await listDir(roots.cursorProjects)).filter(entry => entry.isDirectory());
+    const perProject = await Promise.all(projects.map(async project => {
       const transcripts = path.join(roots.cursorProjects, project.name, 'agent-transcripts');
       const sessions = (await listDir(transcripts)).filter(entry => entry.isDirectory());
-      if (!sessions.length) continue;
+      if (!sessions.length) return [];
       const cwd = await slugCwd(project.name);
-      for (const session of sessions) {
+      const perSession = await Promise.all(sessions.map(async session => {
         const dir = path.join(transcripts, session.name);
         const origin = cliChats.has(session.name) ? 'cli' : 'ide';
-        for (const entry of await listDir(dir)) {
-          if (entry.isFile() && entry.name === `${session.name}.jsonl`) sources.push(jsonlSource(path.join(dir, entry.name), { cwd, origin }));
-        }
-        for (const child of await listDir(path.join(dir, 'subagents'))) {
-          if (!child.isFile() || !child.name.endsWith('.jsonl')) continue;
-          sources.push(jsonlSource(path.join(dir, 'subagents', child.name), { cwd, origin, parentNativeId: session.name }));
-        }
-      }
-    }
-    return sources;
+        const [entries, children] = await Promise.all([listDir(dir), listDir(path.join(dir, 'subagents'))]);
+        return [
+          ...entries.filter(entry => entry.isFile() && entry.name === `${session.name}.jsonl`)
+            .map(entry => jsonlSource(path.join(dir, entry.name), { cwd, origin })),
+          ...children.filter(child => child.isFile() && child.name.endsWith('.jsonl'))
+            .map(child => jsonlSource(path.join(dir, 'subagents', child.name), { cwd, origin, parentNativeId: session.name })),
+        ];
+      }));
+      return perSession.flat();
+    }));
+    return perProject.flat();
   },
 
   // Titles, archive flags and workspace folders from the IDE's composer headers. Throws

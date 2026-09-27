@@ -97,10 +97,15 @@ export function rankConversations(db, query, options = {}) {
 
   // Keep one copy of each duplicated passage: the one in the oldest session.
   const byHash = new Map();
+  // Age of a session for picking the original: started earlier, then finished earlier (a
+  // fork that continued is newer than what it copied).
+  const age = sessionId => {
+    const session = resolve.session(sessionId);
+    return `${session?.created_at ?? ''}|${session?.updated_at ?? ''}`;
+  };
   for (const passage of passages) {
     const current = byHash.get(passage.hash);
-    const created = resolve.session(passage.sessionId)?.created_at ?? '';
-    if (!current || created < (resolve.session(current.sessionId)?.created_at ?? '')) byHash.set(passage.hash, passage);
+    if (!current || age(passage.sessionId) < age(current.sessionId)) byHash.set(passage.hash, passage);
   }
   const unique = [...byHash.values()];
   const passageTerms = termCoverage(db, 'passages_fts', new Set(unique.map(p => p.id)), query.terms);

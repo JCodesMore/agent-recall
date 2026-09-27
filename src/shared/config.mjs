@@ -88,7 +88,7 @@ export const RANKING = Object.freeze({
   SUMMARY_PENALTY: 0.5,
   // Turns that ran a recall lookup are usually the request for a conversation, not the
   // conversation itself.
-  RECALL_PENALTY: 0.3,
+  RECALL_PENALTY: 0.15,
 });
 
 export const SYNC = Object.freeze({

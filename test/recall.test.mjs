@@ -93,8 +93,8 @@ test('titles from the desktop app and /rename win over the first prompt', async 
 test('the current project is a boost, not a filter', async t => {
   const home = withHome(t);
   const here = path.join(home.root, 'work', 'atlas-app');
-  home.jsonl(project('-elsewhere', 'far-1'), [claude.user('tile cache eviction policy', 1, { cwd: '/elsewhere/tiles' })]);
-  home.jsonl(project('-map', 'near-2'), [claude.user('tile cache eviction policy', 1, { cwd: here })]);
+  home.jsonl(project('-elsewhere', 'far-1'), [claude.user('tile cache eviction policy north', 1, { cwd: '/elsewhere/tiles' })]);
+  home.jsonl(project('-map', 'near-2'), [claude.user('tile cache eviction policy south', 1, { cwd: here })]);
   const result = await recall.search('tile cache eviction', { cwd: here });
   assert.deepEqual(handles(result), ['near-2', 'far-1']);
   const scoped = await recall.search('tile cache eviction', { project: 'tiles' });

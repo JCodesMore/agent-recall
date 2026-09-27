@@ -92,7 +92,10 @@ export function createWriter(db) {
     q.deleteSessionDoc.run(sessionId);
     const context = [effective.project, effective.cwd, gitBranch, PROVIDER_LABELS[provider], effective.origin, effective.meta?.agentType]
       .filter(Boolean).join(' ');
-    q.insertSessionDoc.run(sessionId, effective.title ?? '', context);
+    // A title copied from the first prompt is already indexed with that turn; counting it
+    // twice would rank chats that open with a recall request above what they asked for.
+    const title = effective.titleSource === 'prompt' ? '' : effective.title ?? '';
+    q.insertSessionDoc.run(sessionId, title, context);
   }
 
   function upsertSession(provider, sourceId, session) {

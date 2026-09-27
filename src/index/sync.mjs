@@ -113,8 +113,9 @@ export async function syncIndex({ providers, full = false, budgetMs = Infinity, 
         transaction(db, () => gone.forEach(row => writer.removeSource(row.path)));
         stats.removed += gone.length;
       }
-      for (const source of sources) {
-        const stat = await statSource(source);
+      const fileStats = await Promise.all(sources.map(statSource));
+      for (const [index, source] of sources.entries()) {
+        const stat = fileStats[index];
         if (!stat) continue;
         const row = known.get(source.path);
         if (!full && row && row.size === stat.size && row.mtime === stat.mtime && row.extra === stat.extra) {

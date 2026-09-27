@@ -181,40 +181,34 @@ const parser = {
   },
 };
 
+// Subagent transcripts sit below their parent session, sometimes nested (workflows/).
 async function subagentSources(sessionDir, parentNativeId, origin) {
-  const sources = [];
   const walk = async dir => {
-    for (const entry of await listDir(dir)) {
+    const entries = await listDir(dir);
+    const nested = await Promise.all(entries.map(async entry => {
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) await walk(full);
-      else if (entry.isFile() && /^agent-.+\.jsonl$/i.test(entry.name)) {
-        const agentId = path.basename(entry.name, '.jsonl');
-        const meta = await readJson(full.replace(/\.jsonl$/i, '.meta.json'));
-        sources.push({
-          provider: PROVIDER,
-          path: full,
-          kind: 'jsonl',
-          meta: { origin, parentNativeId, agentId, agentTitle: meta?.description ? oneLine(meta.description, LIMITS.TITLE_MAX_CHARS) : null, agentType: meta?.agentType ?? null },
-        });
-      }
-    }
+      if (entry.isDirectory()) return walk(full);
+      if (!entry.isFile() || !/^agent-.+\.jsonl$/i.test(entry.name)) return [];
+      return [{ provider: PROVIDER, path: full, kind: 'jsonl', meta: { origin, parentNativeId, agentId: path.basename(entry.name, '.jsonl') } }];
+    }));
+    return nested.flat();
   };
-  await walk(path.join(sessionDir, 'subagents'));
-  return sources;
+  return walk(path.join(sessionDir, 'subagents'));
 }
 
 async function projectSources(projectsRoot, origin) {
-  const sources = [];
-  for (const project of await listDir(projectsRoot)) {
-    if (!project.isDirectory()) continue;
+  const projects = (await listDir(projectsRoot)).filter(entry => entry.isDirectory());
+  const perProject = await Promise.all(projects.map(async project => {
     const projectDir = path.join(projectsRoot, project.name);
-    for (const entry of await listDir(projectDir)) {
+    const entries = await listDir(projectDir);
+    const nested = await Promise.all(entries.map(async entry => {
       const full = path.join(projectDir, entry.name);
-      if (entry.isFile() && entry.name.endsWith('.jsonl')) sources.push({ provider: PROVIDER, path: full, kind: 'jsonl', meta: { origin } });
-      else if (entry.isDirectory()) sources.push(...await subagentSources(full, entry.name, origin));
-    }
-  }
-  return sources;
+      if (entry.isFile() && entry.name.endsWith('.jsonl')) return [{ provider: PROVIDER, path: full, kind: 'jsonl', meta: { origin } }];
+      return entry.isDirectory() ? subagentSources(full, entry.name, origin) : [];
+    }));
+    return nested.flat();
+  }));
+  return perProject.flat();
 }
 
 // Desktop Code tab and Cowork both keep local_<id>.json next to their sessions.
@@ -238,20 +232,20 @@ export const claudeProvider = {
   id: PROVIDER,
 
   async discover(roots) {
-    const sources = await projectSources(roots.claudeProjects, 'cli');
-    for (const item of await desktopSessionFiles(roots.claudeCowork)) {
-      if (typeof item === 'object') sources.push(...await projectSources(path.join(item.dir, '.claude', 'projects'), 'cowork'));
-    }
-    return sources;
+    const cowork = (await desktopSessionFiles(roots.claudeCowork)).filter(item => typeof item === 'object');
+    const all = await Promise.all([
+      projectSources(roots.claudeProjects, 'cli'),
+      ...cowork.map(item => projectSources(path.join(item.dir, '.claude', 'projects'), 'cowork')),
+    ]);
+    return all.flat();
   },
 
   // Titles, archive flags and origins that live outside the transcripts.
   async labels(roots) {
     const labels = [];
     for (const [root, origin] of [[roots.claudeDesktopSessions, 'desktop'], [roots.claudeCowork, 'cowork']]) {
-      for (const file of await desktopSessionFiles(root)) {
-        if (typeof file !== 'string') continue;
-        const data = await readJson(file);
+      const files = (await desktopSessionFiles(root)).filter(file => typeof file === 'string');
+      for (const data of await Promise.all(files.map(readJson))) {
         if (!data?.cliSessionId) continue;
         const folder = Array.isArray(data.userSelectedFolders) ? data.userSelectedFolders[0] : null;
         labels.push({
@@ -267,7 +261,12 @@ export const claudeProvider = {
     return labels;
   },
 
-  parse(source, cursor) {
+  async parse(source, cursor) {
+    // A subagent's description and type live beside it; read only when parsing from the start.
+    if (source.meta?.parentNativeId && !cursor?.state) {
+      const meta = await readJson(source.path.replace(/\.jsonl$/i, '.meta.json'));
+      source = { ...source, meta: { ...source.meta, agentTitle: meta?.description ? oneLine(meta.description, LIMITS.TITLE_MAX_CHARS) : null, agentType: meta?.agentType ?? null } };
+    }
     return parseJsonlSource(source, cursor, parser);
   },
 
