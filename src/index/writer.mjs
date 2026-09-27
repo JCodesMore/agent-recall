@@ -58,6 +58,12 @@ export function createWriter(db) {
         resume = excluded.resume, meta = excluded.meta, parsed = excluded.parsed
       WHERE sessions.source_id = excluded.source_id
       RETURNING id`),
+    owner: db.prepare(`SELECT s.id, s.source_id AS sourceId, src.mtime FROM sessions s JOIN sources src ON src.id = s.source_id
+      WHERE s.provider = ? AND s.native_id = ?`),
+    deleteSession: db.prepare('DELETE FROM sessions WHERE id = ?'),
+    forceReparse: db.prepare('UPDATE sources SET size = -1, cursor = NULL WHERE id = ?'),
+    reparseLosers: db.prepare("UPDATE sources SET size = -1, cursor = NULL WHERE json_extract(diagnostics, '$.duplicates') > 0"),
+    setDiagnostics: db.prepare('UPDATE sources SET diagnostics = ? WHERE id = ?'),
     label: db.prepare('SELECT * FROM labels WHERE provider = ? AND native_id = ?'),
     deleteSessionDoc: db.prepare('DELETE FROM sessions_fts WHERE rowid = ?'),
     insertSessionDoc: db.prepare('INSERT INTO sessions_fts(rowid, title, context) VALUES (?, ?, ?)'),
@@ -98,7 +104,19 @@ export function createWriter(db) {
     q.insertSessionDoc.run(sessionId, title, context);
   }
 
-  function upsertSession(provider, sourceId, session) {
+  // Two files can hold the same session (a copied project folder, a move caught mid-way).
+  // The most recently written one owns it; the other is re-read whenever a source goes away.
+  function claim(provider, sourceId, nativeId, mtime) {
+    const owner = q.owner.get(provider, nativeId);
+    if (!owner || owner.sourceId === sourceId) return true;
+    if (mtime < owner.mtime) return false;
+    q.deleteSession.run(owner.id);
+    q.forceReparse.run(owner.sourceId);
+    return true;
+  }
+
+  function upsertSession(provider, sourceId, session, mtime) {
+    if (!claim(provider, sourceId, session.nativeId, mtime)) return null;
     const label = q.label.get(provider, session.nativeId);
     const effective = effectiveSession(session, label);
     const row = q.upsertSession.get(
@@ -122,11 +140,11 @@ export function createWriter(db) {
     }
   }
 
-  function writeContent(provider, sourceId, parsed, append) {
+  function writeContent(provider, sourceId, parsed, append, mtime) {
     const ids = new Map();
     let duplicates = 0;
     for (const session of parsed.sessions) {
-      const id = upsertSession(provider, sourceId, session);
+      const id = upsertSession(provider, sourceId, session, mtime);
       if (id === null) duplicates += 1;
       else ids.set(session.nativeId, id);
     }
@@ -149,6 +167,7 @@ export function createWriter(db) {
     }
     // Sessions without new messages still need a message count after a full write.
     if (!append) for (const sessionId of ids.values()) if (!firstSeq.has(sessionId)) q.countMessages.run(sessionId, sessionId);
+    q.setDiagnostics.run(json({ ...parsed.diagnostics, duplicates }), sourceId);
     return { sessions: ids.size, messages: parsed.messages.length, duplicates };
   }
 
@@ -157,16 +176,17 @@ export function createWriter(db) {
       q.deleteSource.run(source.path);
       const { id } = q.insertSource.get(source.path, source.provider, stat.size, stat.mtime, stat.extra ?? '', stat.head ?? null,
         json(parsed.cursor), now, json(parsed.diagnostics));
-      return writeContent(source.provider, id, parsed, false);
+      return writeContent(source.provider, id, parsed, false, stat.mtime);
     },
 
     appendSource(sourceId, source, stat, parsed, now) {
       q.updateSource.run(stat.size, stat.mtime, stat.extra ?? '', stat.head ?? null, json(parsed.cursor), now, json(parsed.diagnostics), sourceId);
-      return writeContent(source.provider, sourceId, parsed, true);
+      return writeContent(source.provider, sourceId, parsed, true, stat.mtime);
     },
 
     removeSource(path) {
       q.deleteSource.run(path);
+      q.reparseLosers.run();
     },
 
     // Replaces a provider's labels and re-derives the sessions whose label changed.

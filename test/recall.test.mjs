@@ -147,3 +147,20 @@ test('appended messages are indexed incrementally', async t => {
   assert.deepEqual(handles(await recall.search('walrus', { sync: 'never' })), ['grow-1']);
   assert.equal((await recall.show('grow-1')).session.messages, 2);
 });
+
+test('a session copied to a second folder follows the newest copy and survives deleting either', async t => {
+  const home = withHome(t);
+  const first = home.jsonl(project('-old-place', 'moved-1'), [claude.user('ocelot migration plan', 1)]);
+  await recall.sync();
+  const later = new Date(Date.now() + 60_000);
+  const copy = home.jsonl(project('-new-place', 'moved-1'), [claude.user('ocelot migration plan', 1), claude.user('giraffe follow up', 2)]);
+  fs.utimesSync(copy, later, later);
+  await recall.sync();
+  assert.deepEqual(handles(await recall.search('giraffe', { sync: 'never' })), ['moved-1']);
+  fs.rmSync(copy);
+  await recall.sync();
+  assert.deepEqual(handles(await recall.search('ocelot', { sync: 'never' })), ['moved-1']);
+  fs.rmSync(first);
+  await recall.sync();
+  assert.deepEqual(handles(await recall.search('ocelot', { sync: 'never' })), []);
+});

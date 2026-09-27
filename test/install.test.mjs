@@ -47,3 +47,16 @@ test('an installed copy runs', async t => {
   const out = execFileSync(process.execPath, [path.join(target, 'scripts', 'recall.mjs'), '--version'], { encoding: 'utf8' });
   assert.equal(out.trim(), JSON.parse(fs.readFileSync('package.json', 'utf8')).version);
 });
+
+test('a Claude skill link pointing somewhere else is never written through', async t => {
+  const home = tempHome(t);
+  const checkout = path.join(home, 'dev-checkout');
+  fs.mkdirSync(checkout);
+  fs.writeFileSync(path.join(checkout, 'SKILL.md'), 'dev');
+  fs.mkdirSync(path.join(home, '.claude', 'skills'), { recursive: true });
+  fs.symlinkSync(checkout, path.join(home, '.claude', 'skills', 'agent-recall'), process.platform === 'win32' ? 'junction' : 'dir');
+  const result = await install({ home, index: false });
+  assert.deepEqual(result.actions.map(a => a.action), ['install', 'skipped']);
+  assert.equal(fs.readFileSync(path.join(checkout, 'SKILL.md'), 'utf8'), 'dev');
+  assert.deepEqual(fs.readdirSync(checkout), ['SKILL.md']);
+});

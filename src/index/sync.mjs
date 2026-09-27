@@ -91,7 +91,8 @@ export async function syncIndex({ providers, full = false, budgetMs = Infinity, 
   try {
     const roots = sourceRoots();
     const writer = createWriter(db);
-    const known = new Map(db.prepare('SELECT id, path, provider, size, mtime, extra, head, cursor FROM sources').all().map(row => [row.path, row]));
+    const loadKnown = () => new Map(db.prepare('SELECT id, path, provider, size, mtime, extra, head, cursor FROM sources').all().map(row => [row.path, row]));
+    let known = loadKnown();
     const selected = providersFor(providers);
     const work = [];
 
@@ -112,6 +113,8 @@ export async function syncIndex({ providers, full = false, budgetMs = Infinity, 
       if (gone.length) {
         transaction(db, () => gone.forEach(row => writer.removeSource(row.path)));
         stats.removed += gone.length;
+        // Removing a source can hand its sessions to a copy elsewhere; see those now.
+        known = loadKnown();
       }
       const fileStats = await Promise.all(sources.map(statSource));
       for (const [index, source] of sources.entries()) {

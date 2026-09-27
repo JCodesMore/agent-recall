@@ -92,15 +92,30 @@ function removeEmptyDirs(dir) {
   if (!fs.readdirSync(dir).length) fs.rmdirSync(dir);
 }
 
+function isLink(dir) {
+  try {
+    return fs.lstatSync(dir).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+// Same folder after resolving links; a missing folder compares by its path.
+function sameDir(a, b) {
+  const real = dir => (fs.existsSync(dir) ? fs.realpathSync(dir) : dir);
+  return comparablePath(real(a)) === comparablePath(real(b));
+}
+
 // A second skill folder (Claude's) becomes a link to the primary copy, so there is one copy
-// to update. Falls back to a copy where links are not allowed.
+// to update. A link the user pointed elsewhere (a dev checkout) is left alone: nothing is
+// ever written through it. Falls back to a copy where links are not allowed.
 function installLink(link, primary, files, actions, dryRun) {
-  const points = linkTarget(link);
-  if (points && comparablePath(points) === comparablePath(fs.existsSync(primary) ? fs.realpathSync(primary) : primary)) {
-    actions.push({ action: 'linked', target: link, to: primary });
+  if (isLink(link)) {
+    if (sameDir(link, primary)) actions.push({ action: 'linked', target: link, to: primary });
+    else actions.push({ action: 'skipped', target: link, reason: `it links to ${linkTarget(link) ?? 'a missing folder'}` });
     return;
   }
-  if (fs.existsSync(link) || points) {
+  if (fs.existsSync(link)) {
     installCopy(link, files, actions, dryRun);
     return;
   }
@@ -136,8 +151,7 @@ export async function install({ targets, dryRun = false, uninstall = false, agen
 
   if (uninstall) {
     for (const dir of explicit ?? [...defaults.links, defaults.primary, ...defaults.legacy]) {
-      const points = linkTarget(dir);
-      if (points && !explicit) {
+      if (isLink(dir) && !explicit) {
         actions.push({ action: 'unlink', target: dir });
         if (!dryRun) removeLink(dir);
       } else removeOwned(dir, actions, dryRun);
@@ -146,7 +160,7 @@ export async function install({ targets, dryRun = false, uninstall = false, agen
   }
 
   for (const dir of explicit ?? [defaults.primary]) {
-    if (comparablePath(dir) === comparablePath(ROOT)) continue;
+    if (sameDir(dir, ROOT)) continue;
     installCopy(dir, files, actions, dryRun);
   }
   if (!explicit) {
@@ -158,7 +172,7 @@ export async function install({ targets, dryRun = false, uninstall = false, agen
 }
 
 export function renderInstall(result) {
-  const lines = result.actions.map(item => `${item.action}: ${item.target}${item.to ? ` -> ${item.to}` : ''}`);
+  const lines = result.actions.map(item => `${item.action}: ${item.target}${item.to ? ` -> ${item.to}` : ''}${item.reason ? ` (${item.reason})` : ''}`);
   if (!result.dryRun && result.actions.some(item => ['install', 'update', 'link', 'linked'].includes(item.action))) {
     lines.push('', `Agent Recall ${result.version} is installed. The first index is building in the background.`);
     lines.push('Start a new chat with your agent and ask something like: "what did we decide about X last week?"');
