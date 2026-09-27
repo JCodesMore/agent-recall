@@ -30,7 +30,7 @@ Objective: v1 rewrite of Agent Recall on `rewrite/v1` (see docs/GOAL.md for done
 
 ## Done
 
-- All goal lines. `npm run check` green: 36 tests, synthetic eval hit@1 1.00, hit@5 1.00.
+- All goal lines. `npm run check` green: 44 tests, synthetic eval hit@1 1.00, hit@5 1.00.
 - Private eval (37 real cases, `npm run eval:local`): v1 hit@1 0.62, hit@5 0.92;
   v0.6 on the same set 0.24 / 0.38.
 - Real machine (Claude 180 + 756 subagents, Codex 628 + 1,604, OpenCode 25 + 44, Cursor
@@ -48,6 +48,8 @@ Objective: v1 rewrite of Agent Recall on `rewrite/v1` (see docs/GOAL.md for done
 - `peers.json` (same content, self-skipped by hostname) sits in each computer's data folder.
   The old `recall-network.*` wrapper was retired; pc-link's SKILL.md now points at
   `--peers all`. Orphaned plugin 0.5.0 and the v0 restore backup went to the Recycle Bin.
+- Verified live: search from TWELVE and from the MacBook across all three computers (~1 s),
+  `read --peer` with `--grep` on THIRTEEN (PowerShell), non-ASCII queries Mac -> Windows.
 - To update later: `node scripts/recall.mjs install` from a checkout on any one computer.
 
 ## Next
