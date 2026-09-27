@@ -37,8 +37,8 @@ index path; the file sits next to it):
   because SSH sessions do not load your shell profile).
 - `hostnames`: optional names this computer answers to. The same file can then list every
   computer and be copied to all of them; each skips its own entry.
-- `shell`: only when a path contains spaces: `posix`, `powershell` or `cmd`, the shell SSH
-  starts on that computer.
+- `shell`: only when a path contains spaces: `posix` or `powershell`, the shell SSH starts on
+  that computer.
 
 ## Check it
 
@@ -53,4 +53,6 @@ Each computer reports its version and conversation count, or why it could not be
 Only the fixed words from `peers.json` (the Node command, the script path and
 `peer-request`) are placed on the remote command line. The query and every other argument
 travel as JSON on SSH's standard input, and the remote side answers only `search`, `read`,
-`show`, `recent` and `doctor`, never forwarding to further computers.
+`show`, `recent` and `doctor`: it refuses `--out` (no files are written) and never forwards to
+further computers. Each computer returns up to `--limit` results, ranked with the others by
+score; the current project boost applies wherever the same folder exists.

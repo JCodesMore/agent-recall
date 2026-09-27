@@ -134,6 +134,9 @@ export const PEERS = Object.freeze({
   // Commands a remote computer answers; everything else is refused there.
   COMMANDS: Object.freeze(['search', 'read', 'show', 'recent', 'doctor']),
   CONNECT_TIMEOUT_S: 8,
+  // A computer that stops answering mid-call (a laptop going to sleep) is dropped after ~30 s.
+  ALIVE_INTERVAL_S: 10,
+  ALIVE_COUNT: 3,
   // A peer's first search may build its index; later ones take about a second.
   TIMEOUT_MS: 180_000,
   MAX_OUTPUT_BYTES: 64 * 1024 * 1024,

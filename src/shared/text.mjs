@@ -26,6 +26,11 @@ export function truncate(text, max) {
   return value.length <= max ? value : `${value.slice(0, Math.max(0, max - 1))}…`;
 }
 
+// JSON text with every non-ASCII character as a \u escape; parses back to the same value.
+export function escapeNonAscii(json) {
+  return json.replace(/[\u007f-\uffff]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
 export function oneLine(text, max = LIMITS.TOOL_SUMMARY_MAX_CHARS) {
   return truncate(String(text ?? '').replace(/\s+/g, ' ').trim(), max);
 }

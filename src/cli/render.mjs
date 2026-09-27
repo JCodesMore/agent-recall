@@ -110,7 +110,7 @@ export function renderShow(result) {
   field('started', s.created);
   field('updated', s.updated);
   field('first prompt', s.firstPrompt && oneLine(s.firstPrompt, 200));
-  field('transcript', s.source);
+  field('transcript', s.source && s.peer ? `${s.source} (on ${s.peer})` : s.source);
   if (s.resume) field('resume', [s.resume.command, ...s.resume.args].join(' ') + (s.resume.cwd ? `   (in ${s.resume.cwd})` : ''));
   if (result.root) lines.push(`part of: ${sessionLine(result.root)}`);
   if (result.subagents.length) {
@@ -119,7 +119,8 @@ export function renderShow(result) {
   }
   if (result.attachments.length) {
     lines.push('attachments:');
-    for (const a of result.attachments) lines.push(`  ${a.id}  #${a.seq} ${a.mime} ${a.bytes} bytes${a.name ? ` ${a.name}` : ''}   (attachment ${a.id} --out <file>)`);
+    const save = a => (s.peer ? `   (on ${s.peer}: attachment ${a.id} --out <file>)` : `   (attachment ${a.id} --out <file>)`);
+    for (const a of result.attachments) lines.push(`  ${a.id}  #${a.seq} ${a.mime} ${a.bytes} bytes${a.name ? ` ${a.name}` : ''}${save(a)}`);
   }
   lines.push('', `Next: read ${ref(s)}`);
   lines.push(...warningsBlock(result));

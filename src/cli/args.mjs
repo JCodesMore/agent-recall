@@ -52,7 +52,7 @@ function toInt(flag, value) {
 }
 
 // Flags that only make sense on this computer are not passed on to another one.
-const LOCAL_ONLY_FLAGS = new Set(['json', 'peers', 'peer', 'stdin', 'out', 'help']);
+export const LOCAL_ONLY_FLAGS = new Set(['json', 'peers', 'peer', 'stdin', 'out', 'help']);
 
 /** Rebuilds a command line from parsed flags, for running the same command on another computer. */
 export function toArgv(command, flags, positional) {
@@ -60,8 +60,9 @@ export function toArgv(command, flags, positional) {
   const argv = [command];
   for (const [name, value] of Object.entries(flags)) {
     if (LOCAL_ONLY_FLAGS.has(name) || value === undefined || value === false) continue;
+    // --name=value keeps a value such as "--force" from being read as the next option.
     if (spec[name] === 'bool') argv.push(`--${name}`);
-    else argv.push(`--${name}`, spec[name] === 'list' ? value.join(',') : String(value));
+    else argv.push(`--${name}=${spec[name] === 'list' ? value.join(',') : String(value)}`);
   }
   return [...argv, '--', ...positional];
 }

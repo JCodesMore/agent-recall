@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { APP, EXIT, LIMITS, PEERS, VERSION } from '../shared/config.mjs';
-import { COMMAND_ALIASES, COMMANDS, UsageError, closest, parseArgs, parseWhen, toArgv } from './args.mjs';
+import { COMMAND_ALIASES, COMMANDS, LOCAL_ONLY_FLAGS, UsageError, closest, parseArgs, parseWhen, toArgv } from './args.mjs';
+import { escapeNonAscii } from '../shared/text.mjs';
 import { renderAttachment, renderDoctor, renderError, renderRead, renderRecent, renderSearch, renderShow, renderSync } from './render.mjs';
 
 const HELP = `Agent Recall ${VERSION}: search and read past Claude Code, Codex, OpenCode and Cursor conversations.
@@ -69,6 +70,11 @@ function filterOptions(flags) {
   };
 }
 
+// Dates are resolved here, so a bare date means this computer's day on every computer.
+function dates(flags) {
+  return { since: parseWhen('since', flags.since), until: parseWhen('until', flags.until) };
+}
+
 // Peer configuration mistakes are usage errors: the fix is in peers.json or the command line.
 async function peersFor(names) {
   const { PeerError, selectPeers } = await import('../peers/peers.mjs');
@@ -94,12 +100,15 @@ async function answerPeer() {
   } catch {
     throw new UsageError('peer-request expects {"argv": [...]} on standard input.');
   }
+  asciiJson = true;
   const command = COMMAND_ALIASES[argv?.[0]] ?? argv?.[0];
   if (!Array.isArray(argv) || !PEERS.COMMANDS.includes(command)) throw new UsageError(`peer-request answers only: ${PEERS.COMMANDS.join(', ')}.`);
-  const end = argv.indexOf('--');
-  const options = end === -1 ? argv : argv.slice(0, end);
-  if (options.some(arg => /^--peers?(=|$)/.test(String(arg)))) throw new UsageError('peer-request does not forward to further computers.');
-  return main([command, '--json', ...argv.slice(1).map(String)]);
+  const rest = argv.slice(1).map(String);
+  // Judged on parsed flags, so aliases and -x/--x=y spellings cannot slip past.
+  const { flags } = parseArgs(command, rest);
+  const refused = Object.keys(flags).filter(name => LOCAL_ONLY_FLAGS.has(name) && name !== 'json');
+  if (refused.length) throw new UsageError(`peer-request refuses --${refused.join(', --')}: it only reads, and never forwards to further computers.`);
+  return main([command, '--json', ...rest]);
 }
 
 async function run(command, flags, positional, json) {
@@ -118,11 +127,11 @@ async function run(command, flags, positional, json) {
       result.completeness = { complete: result.index.pending === 0 && result.warnings.length === 0, pending: result.index.pending };
       if (!flags.peers) return [result, renderSearch];
       const { searchAcross } = await import('../peers/federate.mjs');
-      return [await searchAcross(result, await peersFor(flags.peers), toArgv('search', { ...flags, cwd }, [text])), renderSearch];
+      return [await searchAcross(result, await peersFor(flags.peers), toArgv('search', { ...flags, ...dates(flags), cwd }, [text])), renderSearch];
     }
     case 'read':
       if (flags.peer) {
-        if (flags.out) throw new UsageError('--out writes on this computer; run it on the computer that has the conversation.');
+        if (flags.out) throw new UsageError('--out cannot write another computer\'s conversation here; use --all to read it in one page.');
         return [await onePeer(flags.peer, toArgv('read', flags, [one('handle')])), renderRead];
       }
       return [await recall.read(one('handle'), {
@@ -136,7 +145,7 @@ async function run(command, flags, positional, json) {
       const result = await recall.recent({ ...filterOptions(flags), onProgress });
       if (!flags.peers) return [result, renderRecent];
       const { recentAcross } = await import('../peers/federate.mjs');
-      return [await recentAcross(result, await peersFor(flags.peers), toArgv('recent', flags, []), flags.limit ?? LIMITS.RECENT_DEFAULT), renderRecent];
+      return [await recentAcross(result, await peersFor(flags.peers), toArgv('recent', { ...flags, ...dates(flags) }, []), flags.limit ?? LIMITS.RECENT_DEFAULT), renderRecent];
     }
     case 'sync':
       return [await recall.sync({ full: flags.full, providers: flags.provider, onProgress }), renderSync];
@@ -157,8 +166,16 @@ async function run(command, flags, positional, json) {
   }
 }
 
+// Answers to another computer are ASCII-only JSON: Windows PowerShell re-encodes what passes
+// through an SSH session, and \u escapes survive any code page.
+let asciiJson = false;
+const toJson = value => {
+  const text = JSON.stringify({ schemaVersion: APP.JSON_SCHEMA, ...value });
+  return asciiJson ? escapeNonAscii(text) : text;
+};
+
 function emit(json, value, render) {
-  process.stdout.write(`${json ? JSON.stringify({ schemaVersion: APP.JSON_SCHEMA, ...value }) : render(value)}\n`);
+  process.stdout.write(`${json ? toJson(value) : render(value)}\n`);
 }
 
 export async function main(argv) {
@@ -182,7 +199,7 @@ export async function main(argv) {
     const usage = error instanceof UsageError;
     const code = usage || error.code === 'usage' || error.code === 'ambiguous' ? EXIT.USAGE : error.code === 'not_found' || error.code === 'empty' ? EXIT.NOT_FOUND : EXIT.ERROR;
     const payload = { code: usage ? 'usage' : error.code ?? 'error', message: error.message, hint: error.hint ?? null, candidates: error.candidates ?? undefined };
-    if (json) process.stdout.write(`${JSON.stringify({ schemaVersion: APP.JSON_SCHEMA, error: payload })}\n`);
+    if (json) process.stdout.write(`${toJson({ error: payload })}\n`);
     else process.stderr.write(`${renderError(error)}\n`);
     if (!usage && !error.code) process.stderr.write(`${error.stack}\n`);
     process.exitCode = code;
