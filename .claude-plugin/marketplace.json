@@ -6,15 +6,15 @@
     "url": "https://github.com/JCodesMore"
   },
   "metadata": {
-    "description": "Find any conversation you've had across Claude Code, Codex, and OpenCode",
-    "version": "0.6.0"
+    "description": "Let your AI agents find and read any past conversation from Claude Code, Codex, OpenCode and Cursor.",
+    "version": "1.0.0"
   },
   "plugins": [
     {
       "name": "agent-recall",
       "source": "./",
-      "description": "Let your AI agent find any conversation you've had across Claude Code, Codex, and OpenCode.",
-      "version": "0.6.0",
+      "description": "Let your AI agents find and read any past conversation from Claude Code, Codex, OpenCode and Cursor.",
+      "version": "1.0.0",
       "strict": true
     }
   ]

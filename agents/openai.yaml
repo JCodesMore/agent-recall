@@ -1,0 +1,5 @@
+interface:
+  display_name: "Agent Recall"
+  short_description: "Search and read your past agent conversations"
+policy:
+  allow_implicit_invocation: true

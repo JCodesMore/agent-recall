@@ -122,7 +122,7 @@ export async function main(argv) {
     const { flags, positional } = parseArgs(command, rest);
     if (flags.help) return void process.stdout.write(`${HELP}\n`);
     const [result, render] = await run(command, flags, positional, json);
-    emit(json, result, render);
+    if (!flags.quiet) emit(json, result, render);
     if (command === 'sync' && result.errors?.length) process.exitCode = EXIT.ERROR;
   } catch (error) {
     const usage = error instanceof UsageError;
