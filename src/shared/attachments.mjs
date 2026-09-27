@@ -1,9 +1,10 @@
 import crypto from 'node:crypto';
-import { LIMITS } from '../config.mjs';
-import { stableId } from './ids.mjs';
+import { LIMITS } from './config.mjs';
+import { hashHex } from './ids.mjs';
 
-export function attachmentKey(provider, nativeMessageId, sourcePath, nativeAttachmentId) {
-  return `${provider}-attachment:${stableId(provider, nativeMessageId, sourcePath, nativeAttachmentId).slice(0, 24)}`;
+// Content-bound id: the same bytes at the same place keep their id across re-indexing.
+export function attachmentId(provider, sessionNativeId, sha256, occurrence) {
+  return hashHex(provider, sessionNativeId, sha256, occurrence).slice(0, 12);
 }
 
 function validBase64(value) {
