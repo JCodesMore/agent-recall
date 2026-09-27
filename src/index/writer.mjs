@@ -61,6 +61,7 @@ export function createWriter(db) {
     owner: db.prepare(`SELECT s.id, s.source_id AS sourceId, src.mtime FROM sessions s JOIN sources src ON src.id = s.source_id
       WHERE s.provider = ? AND s.native_id = ?`),
     deleteSession: db.prepare('DELETE FROM sessions WHERE id = ?'),
+    deleteOwnSession: db.prepare('DELETE FROM sessions WHERE provider = ? AND native_id = ? AND source_id = ?'),
     forceReparse: db.prepare('UPDATE sources SET size = -1, cursor = NULL WHERE id = ?'),
     reparseLosers: db.prepare("UPDATE sources SET size = -1, cursor = NULL WHERE json_extract(diagnostics, '$.duplicates') > 0"),
     setDiagnostics: db.prepare('UPDATE sources SET diagnostics = ? WHERE id = ?'),
@@ -72,7 +73,8 @@ export function createWriter(db) {
     insertAttachment: db.prepare(`INSERT OR IGNORE INTO attachments(id, session_id, seq, ordinal, kind, mime, bytes, sha256, name, locator)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
     lastTurnStart: db.prepare(`SELECT max(first_seq) AS seq FROM passages WHERE session_id = ? AND (flags & ${PASSAGE_FLAGS.TURN_START}) != 0`),
-    deletePassagesFrom: db.prepare('DELETE FROM passages WHERE session_id = ? AND first_seq >= ?'),
+    passagesFrom: db.prepare('SELECT id, first_seq, last_seq, hash, flags FROM passages WHERE session_id = ? AND first_seq >= ?'),
+    deletePassage: db.prepare('DELETE FROM passages WHERE id = ?'),
     messagesFrom: db.prepare('SELECT seq, ts, role, kind, text, meta FROM messages WHERE session_id = ? AND seq >= ? ORDER BY seq'),
     insertPassage: db.prepare('INSERT INTO passages(session_id, first_seq, last_seq, ts, hash, flags) VALUES (?, ?, ?, ?, ?, ?) RETURNING id'),
     insertPassageDoc: db.prepare('INSERT INTO passages_fts(rowid, user, assistant, tools) VALUES (?, ?, ?, ?)'),
@@ -130,14 +132,21 @@ export function createWriter(db) {
     return row.id;
   }
 
+  // Rebuilds passages from the last turn start (or from 0), writing only those that changed:
+  // a long autonomous turn grows by appends and would otherwise be rewritten every sync.
   function rebuildPassages(sessionId, fromSeq) {
     const start = fromSeq === 0 ? 0 : q.lastTurnStart.get(sessionId)?.seq ?? 0;
-    q.deletePassagesFrom.run(sessionId, start);
+    const existing = new Map(q.passagesFrom.all(sessionId, start).map(row => [row.first_seq, row]));
     const messages = q.messagesFrom.all(sessionId, start).map(row => ({ ...row, meta: parseJson(row.meta, undefined) }));
     for (const passage of buildPassages(messages)) {
+      const old = existing.get(passage.firstSeq);
+      existing.delete(passage.firstSeq);
+      if (old && old.last_seq === passage.lastSeq && old.hash === passage.hash && old.flags === passage.flags) continue;
+      if (old) q.deletePassage.run(old.id);
       const { id } = q.insertPassage.get(sessionId, passage.firstSeq, passage.lastSeq, passage.ts, passage.hash, passage.flags);
       q.insertPassageDoc.run(id, passage.user, passage.assistant, passage.tools);
     }
+    for (const stale of existing.values()) q.deletePassage.run(stale.id);
   }
 
   function writeContent(provider, sourceId, parsed, append, mtime) {
@@ -182,6 +191,15 @@ export function createWriter(db) {
     appendSource(sourceId, source, stat, parsed, now) {
       q.updateSource.run(stat.size, stat.mtime, stat.extra ?? '', stat.head ?? null, json(parsed.cursor), now, json(parsed.diagnostics), sourceId);
       return writeContent(source.provider, sourceId, parsed, true, stat.mtime);
+    },
+
+    // A partial parse (see builder.mjs) replaces only the sessions it returns or removes.
+    updateSource(sourceId, source, stat, parsed, now) {
+      q.updateSource.run(stat.size, stat.mtime, stat.extra ?? '', stat.head ?? null, json(parsed.cursor), now, json(parsed.diagnostics), sourceId);
+      for (const nativeId of [...parsed.removed, ...parsed.sessions.map(session => session.nativeId)]) {
+        q.deleteOwnSession.run(source.provider, nativeId, sourceId);
+      }
+      return writeContent(source.provider, sourceId, parsed, false, stat.mtime);
     },
 
     removeSource(path) {

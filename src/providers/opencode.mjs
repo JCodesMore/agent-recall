@@ -155,9 +155,11 @@ export const opencodeProvider = {
       .sort((a, b) => a.path.localeCompare(b.path));
   },
 
-  // The whole database is one source; sync re-parses it when its size, mtime or WAL changes.
+  // The whole database is one source, re-checked when its size, mtime or WAL changes. With a
+  // cursor only sessions whose version changed are returned (partial), plus removed ids, so a
+  // running OpenCode does not cause a full re-index on every sync.
   // A busy or unreadable database throws, so sync reports it and keeps the previous index.
-  async parse(source) {
+  async parse(source, cursor) {
     const db = openDatabase(source.path);
     try {
       const out = emptyOutput();
@@ -166,11 +168,17 @@ export const opencodeProvider = {
         messages: db.prepare('SELECT id, time_created, data FROM message WHERE session_id = ? ORDER BY time_created, id'),
         parts: db.prepare('SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY message_id, id'),
       };
+      const version = db.prepare("SELECT count(*) || ':' || coalesce(max(time_updated), 0) AS v FROM part WHERE session_id = ?");
+      const previous = cursor?.state?.versions ?? null;
+      const versions = {};
       const sessions = [];
       for (const row of db.prepare('SELECT * FROM session ORDER BY time_created, id').all()) {
+        versions[row.id] = `${row.time_updated}:${row.title}:${row.time_archived}:${version.get(row.id).v}`;
+        if (previous?.[row.id] === versions[row.id]) continue;
         sessions.push(buildSession(row, queries, out, diagnostics));
       }
-      return { sessions, messages: out.messages, attachments: out.attachments, cursor: null, diagnostics };
+      const removed = previous ? Object.keys(previous).filter(id => !(id in versions)) : [];
+      return { sessions, messages: out.messages, attachments: out.attachments, cursor: { state: { versions } }, diagnostics, partial: Boolean(previous), removed };
     } finally {
       db.close();
     }

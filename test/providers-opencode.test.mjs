@@ -1,9 +1,11 @@
 import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import * as recall from '../src/recall.mjs';
 import { opencodeProvider } from '../src/providers/opencode.mjs';
 import { sourceRoots } from '../src/shared/paths.mjs';
 import { fakeHome } from './helpers/home.mjs';
-import { part, writeOpencodeDb } from './helpers/opencode.mjs';
+import { ms, part, writeOpencodeDb } from './helpers/opencode.mjs';
 
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
@@ -103,4 +105,33 @@ test('subagent sessions point at their parent; placeholder titles fall back to t
     ['ses_child', 0, 'user', 'text', 'List auth entry points'],
     ['ses_child', 1, 'assistant', 'summary', 'Summary: two entry points.'],
   ]);
+});
+
+test('a changed database re-indexes only the sessions that changed', async () => {
+  home = fakeHome().activate();
+  const file = writeOpencodeDb(home, [
+    { id: 'ses_keep', title: 'Walrus migration', minute: 0, messages: [{ id: 'msg_k', role: 'user', minute: 1, parts: [part.text('plan the walrus migration')] }] },
+    { id: 'ses_grow', title: 'Zeppelin cache', minute: 0, messages: [{ id: 'msg_g', role: 'user', minute: 1, parts: [part.text('tune the zeppelin cache')] }] },
+    { id: 'ses_gone', title: 'Narwhal report', minute: 0, messages: [{ id: 'msg_n', role: 'user', minute: 1, parts: [part.text('draft the narwhal report')] }] },
+  ]);
+  await recall.sync();
+  const [source] = await opencodeProvider.discover(sourceRoots());
+  const { cursor } = await opencodeProvider.parse(source, null);
+
+  const db = new DatabaseSync(file);
+  db.prepare('INSERT INTO message VALUES (?, ?, ?, ?, ?)').run('msg_g2', 'ses_grow', ms(5), ms(5), JSON.stringify({ role: 'user', time: { created: ms(5) } }));
+  db.prepare('INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)').run('msg_g2_p0', 'msg_g2', 'ses_grow', ms(5), ms(5), JSON.stringify(part.text('add a quokka eviction policy')));
+  db.prepare("DELETE FROM session WHERE id = 'ses_gone'").run();
+  db.close();
+
+  const partial = await opencodeProvider.parse(source, cursor);
+  assert.deepEqual([partial.partial, partial.sessions.map(s => s.nativeId), partial.removed], [true, ['ses_grow'], ['ses_gone']]);
+
+  const synced = await recall.sync();
+  assert.deepEqual([synced.indexed, synced.appended], [0, 1]);
+  const ids = async query => (await recall.search(query, { sync: 'never' })).hits.map(hit => hit.id);
+  assert.deepEqual(await ids('quokka eviction'), ['ses_grow']);
+  assert.deepEqual(await ids('zeppelin cache'), ['ses_grow']);
+  assert.deepEqual(await ids('walrus migration'), ['ses_keep']);
+  assert.deepEqual(await ids('narwhal report'), []);
 });

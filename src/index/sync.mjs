@@ -152,7 +152,8 @@ export async function syncIndex({ providers, full = false, budgetMs = Infinity, 
       const now = new Date().toISOString();
       transaction(db, () => {
         for (const item of batch) {
-          if (item.append) writer.appendSource(item.row.id, item.source, item.stat, item.parsed, now);
+          if (item.parsed.partial) writer.updateSource(item.row.id, item.source, item.stat, item.parsed, now);
+          else if (item.append) writer.appendSource(item.row.id, item.source, item.stat, item.parsed, now);
           else writer.replaceSource(item.source, item.stat, item.parsed, now);
         }
       });
@@ -171,7 +172,10 @@ export async function syncIndex({ providers, full = false, budgetMs = Infinity, 
         item.append = !full && item.source.kind === 'jsonl' && Boolean(cursor?.state) && item.stat.size >= item.row.size
           && cursor.offset <= item.stat.size && await sameHead(item.source.path, item.row.head);
         if (item.source.kind === 'jsonl') item.stat.head = await headHash(item.source.path, Math.min(SYNC.HEAD_BYTES, item.stat.size));
-        item.parsed = await item.provider.parse(item.source, item.append ? cursor : null);
+        // Database sources take their cursor on every change and may answer with a partial update.
+        const resumable = item.append || (!full && item.source.kind !== 'jsonl' && Boolean(item.row));
+        item.parsed = await item.provider.parse(item.source, resumable ? cursor : null);
+        if (item.parsed.partial) item.append = true;
         batch.push(item);
         batchBytes += item.stat.size - (item.append ? item.row.size : 0);
         stats[item.append ? 'appended' : 'indexed'] += 1;
