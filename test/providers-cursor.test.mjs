@@ -170,3 +170,12 @@ test('labels carry IDE titles, archive flags, workspaces and subagent parents', 
     { nativeId: 'ggg-777', title: null, titleSource: null, archived: false, cwd: null, meta: undefined },
   ]);
 });
+
+test('a Cursor state store from before composer headers gives no labels and no error', async () => {
+  home = fakeHome().activate();
+  fs.mkdirSync(path.dirname(roots().cursorState), { recursive: true });
+  const db = new DatabaseSync(roots().cursorState);
+  db.exec('CREATE TABLE ItemTable (key TEXT PRIMARY KEY, value BLOB); CREATE TABLE cursorDiskKV (key TEXT PRIMARY KEY, value BLOB)');
+  db.close();
+  assert.deepEqual(await cursorProvider.labels(roots()), []);
+});

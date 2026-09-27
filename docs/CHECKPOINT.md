@@ -40,6 +40,16 @@ Objective: v1 rewrite of Agent Recall on `rewrite/v1` (see docs/GOAL.md for done
   partial updates); low items closed (config constants, provider-owned refs, newest-first
   sync, `--until` end of day, export cycle guard, Claude origin).
 
+## Deployment (this user's machines)
+
+- Installed from this branch into `~/.agents/skills/agent-recall` on TWELVE (2026-09-27). The
+  `JCodesMore/agent-skills` repo syncs `~/.agents` every 60 s to THIRTEEN and the MacBook, so
+  one install updates all three; Claude and Cursor reach it through links.
+- `peers.json` (same content, self-skipped by hostname) sits in each computer's data folder.
+  The old `recall-network.*` wrapper was retired; pc-link's SKILL.md now points at
+  `--peers all`. Orphaned plugin 0.5.0 and the v0 restore backup went to the Recycle Bin.
+- To update later: `node scripts/recall.mjs install` from a checkout on any one computer.
+
 ## Next
 
 - Codex segments read as separate parts (linked by `continuesIn`); a merged read could come

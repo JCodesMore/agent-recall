@@ -235,10 +235,12 @@ export const cursorProvider = {
 
   // Titles, archive flags and workspace folders from the IDE's composer headers. Throws
   // rather than returning nothing when the store is unreadable, so old labels survive.
+  // Cursor versions before composer headers keep no labels there; titles then come from prompts.
   async labels(roots) {
     if (!roots.cursorState || !(await statOrNull(roots.cursorState))) return [];
     const db = new DatabaseSync(roots.cursorState, { readOnly: true, timeout: SYNC.BUSY_TIMEOUT_MS });
     try {
+      if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'composerHeaders'").get()) return [];
       const labels = [];
       for (const row of db.prepare('SELECT composerId, isArchived, isSubagent, subagentTypeName, value FROM composerHeaders').all()) {
         const value = parseValue(row.value) ?? {};
