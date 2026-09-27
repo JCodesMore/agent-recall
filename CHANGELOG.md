@@ -6,6 +6,9 @@
 
 A rewrite built from how agents actually used 0.6 (1,065 recall calls on real machines).
 
+On this author's real history (37 questions agents had asked about past chats), the right
+conversation comes first 62% of the time and in the top five 92% (0.6: 24% and 38%).
+
 - **Finds more.** Searches rank whole conversations from turn-sized passages, so words spread
   across a chat add up instead of failing an all-words-in-one-message test. Tool calls, file
   names, commands and error output are searchable. Subagent work counts toward its parent
@@ -19,7 +22,8 @@ A rewrite built from how agents actually used 0.6 (1,065 recall calls on real ma
 - **Sees more.** Adds Cursor, Claude desktop and Cowork sessions, nested subagent folders,
   Codex subagent threads and titles.
 - **Faster.** Growing transcripts are read from where the last sync stopped; a search with
-  nothing new answers in about 0.2 s. Big backlogs finish in the background.
+  nothing new answers in about 0.2 s. Big backlogs finish in the background, newest chats
+  first. A running OpenCode no longer causes a full re-index on every sync.
 - **Easier.** Short handles (`abc1234`) plus native ids, prefixes, `codex:<id>` and
   `codex://threads/<id>`; compact text output with the next command to run; `--stdin` for
   queries that are hard to quote; suggestions for mistyped commands and options.

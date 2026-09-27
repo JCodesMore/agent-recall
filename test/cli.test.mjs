@@ -39,6 +39,10 @@ test('--json carries the schema version, and errors map to exit codes', t => {
   assert.equal(search.schemaVersion, 3);
   assert.deepEqual([search.hits[0].id, search.completeness.complete], ['cli-1', true]);
 
+  // The v0 call shape other helpers depend on.
+  const compatible = JSON.parse(run('search', '--json', '--limit', '3', '--cwd', '/work/shop', '--', 'webhook').out);
+  assert.equal(typeof compatible.hits[0].score, 'number');
+
   const missing = run('read', 'zzzzzzz', '--json');
   assert.deepEqual([missing.code, JSON.parse(missing.out).error.code], [3, 'not_found']);
   const typo = run('serch', 'stripe');

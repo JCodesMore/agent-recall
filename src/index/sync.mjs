@@ -144,7 +144,9 @@ export async function syncIndex({ providers, full = false, budgetMs = Infinity, 
 
     // Newest first: a budgeted sync then covers the conversations an agent most likely wants.
     work.sort((a, b) => b.stat.mtime - a.stat.mtime);
-    const totalBytes = work.reduce((sum, item) => sum + Math.max(0, item.stat.size - (item.row?.size ?? 0)), 0);
+    // Bytes each source is expected to parse: all of it on a full or first index, else the growth.
+    const expectedBytes = item => (full || !item.row ? item.stat.size : Math.max(0, item.stat.size - item.row.size));
+    const totalBytes = work.reduce((sum, item) => sum + expectedBytes(item), 0);
     let doneBytes = 0;
     let lastProgress = Date.now();
     let batch = [];
@@ -186,7 +188,7 @@ export async function syncIndex({ providers, full = false, budgetMs = Infinity, 
         stats.providers[item.provider.id].errors += 1;
         stats.errors.push({ provider: item.provider.id, source: displayPath(item.source.path), message: error.message });
       }
-      doneBytes += Math.max(0, item.stat.size - (item.row?.size ?? 0));
+      doneBytes += expectedBytes(item);
       if (batchBytes >= SYNC.BATCH_BYTES || batch.length >= SYNC.BATCH_SOURCES) flush();
       if (onProgress && Date.now() - lastProgress >= SYNC.PROGRESS_INTERVAL_MS) {
         lastProgress = Date.now();

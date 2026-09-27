@@ -27,17 +27,48 @@ Normalized output is documented in `src/providers/builder.mjs`; the provider int
   keeps the same file shape plus `userSelectedFolders` (used as the cwd).
 - **Retention:** `cleanupPeriodDays` in `~/.claude/settings.json` (default 30) deletes old
   transcripts; `doctor` warns below 90 days.
+- **Origin:** the transcript `entrypoint`: `cli`, `desktop` (claude-desktop), `ide`
+  (claude-vscode), `sdk`; Cowork sessions are `cowork`.
 - **Current session:** `CLAUDE_CODE_SESSION_ID` is set for tool processes and excluded.
 
 ## Codex (`codex.mjs`)
 
-To be written with the provider.
+- **Rollouts:** `<CODEX_HOME or ~/.codex>/sessions/YYYY/MM/DD/rollout-<stamp>-<thread>.jsonl`;
+  archived threads move to `archived_sessions/` (archived flag set from the folder). A long
+  thread continues in `rollout-…-<thread>_<segment>.jsonl` files: each segment is a child
+  session `<thread>:<segment>` (`meta.segment`), and `read` points from one part to the next.
+- **Text:** user and assistant words come from `event_msg` `item_completed` items
+  (`UserMessage`, `AgentMessage`, `Plan`), or from `user_message`/`agent_message` events in
+  older rollouts. `response_item` messages are model-context copies and are never indexed
+  as text; a user one is read only for image pixels.
+- **Tools:** `response_item` `function_call`, `custom_tool_call`, `local_shell_call` and
+  `web_search_call`, with `*_output` records as outputs. Code-mode JavaScript is summarized
+  by the `tools.exec_command({cmd})` calls inside it.
+- **Skipped unread:** `compacted` and `world_state` records, reasoning, image generation,
+  and non-message `item_completed` mirrors (about half of all bytes).
+- **Injected text** removed from user messages: `environment_context`, `user_instructions`,
+  `INSTRUCTIONS`, `recommended_plugins`, `turn_aborted`, `in-app-browser-context`,
+  `heartbeat`, `task-notification`, `codex_internal_context`, `subagent_notification`,
+  `skill` tags and `# AGENTS.md instructions for …` lines. IDE and browser context above a
+  `## My request for Codex:` heading is dropped.
+- **Subagents and forks:** `session_meta.source.subagent.thread_spawn` names the parent, the
+  agent nickname and role, and its task path (used as the title; newer prompts are
+  encrypted). A fork's copied parent history is skipped until `subagent_history_start_ordinal`.
+  Forks without a spawn stay separate conversations (`meta.forkedFrom`).
+- **Labels:** the highest `state_<n>.sqlite` (`threads`: name, title, archived, source;
+  `thread_spawn_edges`) and `session_index.jsonl` (newest `thread_name` per id wins).
+  `threads.title` counts only when it differs from the raw first message.
+- **Origin:** `session_meta.source` and `originator`: `cli`, `exec`, `ide` (vscode),
+  `desktop`, `subagent`.
+- **Resume:** `codex resume <thread>`. Desktop links `codex://threads/<id>` resolve as refs.
+- **Current session:** `CODEX_THREAD_ID` is set for tool processes and excluded.
 
 ## OpenCode (`opencode.mjs`)
 
 - **Store:** `<XDG_DATA_HOME or ~/.local/share>/opencode/opencode*.db`, SQLite, opened
   read-only. Tables `session`, `message`, `part` with JSON `data` columns. One source per
-  database; it is re-read whenever the file or its WAL changes.
+  database. When the file or its WAL changes, only sessions whose version (updated time,
+  title, archive time, part count and newest part time) changed are re-indexed.
 - **Parts:** `text` (user or assistant; `synthetic`/`ignored` parts dropped), `tool`
   (`state.input`, `state.output`, `state.error`), `subtask` (a spawned subagent's prompt),
   `file` (data URL attachments). `reasoning`, `step-*`, `patch` and `compaction` are skipped.
