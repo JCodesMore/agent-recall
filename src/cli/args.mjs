@@ -84,10 +84,11 @@ export function parseArgs(command, argv) {
     if (inline === undefined) i += 1;
     if (value === undefined || (inline === undefined && value.startsWith('--'))) throw new UsageError(`--${name} needs a value.`);
     if (type === 'int') flags[name] = toInt(name, value);
-    else if (type === 'list') flags[name] = [...(flags[name] ?? []), ...value.split(',').map(item => item.trim().toLowerCase()).filter(Boolean)];
+    else if (type === 'list') flags[name] = [...(flags[name] ?? []), ...value.split(',').map(item => item.trim()).filter(Boolean)];
     else flags[name] = value;
   }
   if (flags.provider) {
+    flags.provider = flags.provider.map(provider => provider.toLowerCase());
     const known = Object.values(PROVIDERS);
     for (const provider of flags.provider) {
       if (!known.includes(provider)) throw new UsageError(`Unknown provider "${provider}". Use one of: ${known.join(', ')}.`);
