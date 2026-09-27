@@ -92,8 +92,10 @@ export const RANKING = Object.freeze({
 });
 
 export const SYNC = Object.freeze({
-  // A hook-triggered sync is skipped when the last one is younger than this.
-  STALE_AFTER_MS: 2 * 60 * 1_000,
+  // Searches and reads skip syncing when the last sync is younger than this. A sync with
+  // nothing new costs a few hundred milliseconds, so keep this short: agents look for things
+  // said minutes ago in another chat.
+  STALE_AFTER_MS: 10 * 1_000,
   LOCK_STALE_MS: 10 * 60 * 1_000,
   // How long a search or read may spend catching the index up before answering from it and
   // leaving the rest to a background sync.
