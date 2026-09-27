@@ -156,7 +156,8 @@ export const opencodeProvider = {
   },
 
   // The whole database is one source, re-checked when its size, mtime or WAL changes. With a
-  // cursor only sessions whose version changed are returned (partial), plus removed ids, so a
+  // cursor only sessions whose version (session row, message and part counts and times)
+  // changed are returned (partial), plus removed ids, so a
   // running OpenCode does not cause a full re-index on every sync.
   // A busy or unreadable database throws, so sync reports it and keeps the previous index.
   async parse(source, cursor) {
@@ -168,7 +169,8 @@ export const opencodeProvider = {
         messages: db.prepare('SELECT id, time_created, data FROM message WHERE session_id = ? ORDER BY time_created, id'),
         parts: db.prepare('SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY message_id, id'),
       };
-      const version = db.prepare("SELECT count(*) || ':' || coalesce(max(time_updated), 0) AS v FROM part WHERE session_id = ?");
+      const version = db.prepare(`SELECT (SELECT count(*) || ':' || coalesce(max(time_updated), 0) FROM message WHERE session_id = ?1)
+        || ':' || (SELECT count(*) || ':' || coalesce(max(time_updated), 0) FROM part WHERE session_id = ?1) AS v`);
       const previous = cursor?.state?.versions ?? null;
       const versions = {};
       const sessions = [];
@@ -178,7 +180,8 @@ export const opencodeProvider = {
         sessions.push(buildSession(row, queries, out, diagnostics));
       }
       const removed = previous ? Object.keys(previous).filter(id => !(id in versions)) : [];
-      return { sessions, messages: out.messages, attachments: out.attachments, cursor: { state: { versions } }, diagnostics, partial: Boolean(previous), removed };
+      const total = Object.keys(versions).length;
+      return { sessions, messages: out.messages, attachments: out.attachments, cursor: { state: { versions } }, diagnostics, partial: Boolean(previous), removed, total };
     } finally {
       db.close();
     }

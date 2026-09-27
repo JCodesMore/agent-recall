@@ -14,7 +14,8 @@ function withHome(t) {
     claude.assistant('Raised the handler timeout to 30 seconds.', 2),
   ]);
   const run = (...args) => {
-    const env = { ...process.env, ...home.env, CLAUDE_CODE_SESSION_ID: '', CODEX_THREAD_ID: '' };
+    const extra = typeof args[0] === 'object' ? args.shift() : {};
+    const env = { ...process.env, ...home.env, CLAUDE_CODE_SESSION_ID: '', CODEX_THREAD_ID: '', ...extra };
     const result = spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', env });
     return { code: result.status, out: result.stdout, err: result.stderr };
   };
@@ -50,10 +51,13 @@ test('--json carries the schema version, and errors map to exit codes', t => {
   assert.match(typo.err, /Did you mean search\?/);
 });
 
-test('--until with a bare date includes that whole day', t => {
+test('a bare date is a whole local day for --since and --until', t => {
   const run = withHome(t);
-  const ids = (...flags) => JSON.parse(run('recent', '--json', ...flags).out).sessions.map(session => session.id);
-  assert.deepEqual(ids('--until', '2026-01-05'), ['cli-1']);
-  assert.deepEqual(ids('--until', '2026-01-04'), []);
-  assert.deepEqual(ids('--since', '2026-01-06'), []);
+  const ids = (tz, ...flags) => JSON.parse(run({ TZ: tz }, 'recent', '--json', ...flags).out).sessions.map(session => session.id);
+  // The chat was at 10:01 UTC on 2026-01-05: the 5th in Chicago, already the 6th at UTC+14.
+  assert.deepEqual(ids('America/Chicago', '--since', '2026-01-05', '--until', '2026-01-05'), ['cli-1']);
+  assert.deepEqual(ids('America/Chicago', '--until', '2026-01-04'), []);
+  assert.deepEqual(ids('Pacific/Kiritimati', '--since', '2026-01-06', '--until', '2026-01-06'), ['cli-1']);
+  assert.deepEqual(ids('Pacific/Kiritimati', '--until', '2026-01-05'), []);
+  assert.equal(run('recent', '--until', '2026-02-30').code, 2);
 });

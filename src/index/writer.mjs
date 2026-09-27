@@ -58,10 +58,12 @@ export function createWriter(db) {
         resume = excluded.resume, meta = excluded.meta, parsed = excluded.parsed
       WHERE sessions.source_id = excluded.source_id
       RETURNING id`),
-    owner: db.prepare(`SELECT s.id, s.source_id AS sourceId, src.mtime FROM sessions s JOIN sources src ON src.id = s.source_id
+    owner: db.prepare(`SELECT s.id, s.source_id AS sourceId, src.mtime, src.path FROM sessions s JOIN sources src ON src.id = s.source_id
       WHERE s.provider = ? AND s.native_id = ?`),
     deleteSession: db.prepare('DELETE FROM sessions WHERE id = ?'),
     deleteOwnSession: db.prepare('DELETE FROM sessions WHERE provider = ? AND native_id = ? AND source_id = ?'),
+    sourceSize: db.prepare('SELECT size FROM sources WHERE id = ?'),
+    ownedCount: db.prepare('SELECT count(*) AS n FROM sessions WHERE source_id = ?'),
     forceReparse: db.prepare('UPDATE sources SET size = -1, cursor = NULL WHERE id = ?'),
     reparseLosers: db.prepare("UPDATE sources SET size = -1, cursor = NULL WHERE json_extract(diagnostics, '$.duplicates') > 0"),
     setDiagnostics: db.prepare('UPDATE sources SET diagnostics = ? WHERE id = ?'),
@@ -108,17 +110,18 @@ export function createWriter(db) {
 
   // Two files can hold the same session (a copied project folder, a move caught mid-way).
   // The most recently written one owns it; the other is re-read whenever a source goes away.
-  function claim(provider, sourceId, nativeId, mtime) {
+  // Equal times (copies keep them) go to the lower path so ownership does not flip each sync.
+  function claim(provider, source, sourceId, nativeId, mtime) {
     const owner = q.owner.get(provider, nativeId);
     if (!owner || owner.sourceId === sourceId) return true;
-    if (mtime < owner.mtime) return false;
+    if (mtime < owner.mtime || (mtime === owner.mtime && source.path > owner.path)) return false;
     q.deleteSession.run(owner.id);
     q.forceReparse.run(owner.sourceId);
     return true;
   }
 
-  function upsertSession(provider, sourceId, session, mtime) {
-    if (!claim(provider, sourceId, session.nativeId, mtime)) return null;
+  function upsertSession(provider, source, sourceId, session, mtime) {
+    if (!claim(provider, source, sourceId, session.nativeId, mtime)) return null;
     const label = q.label.get(provider, session.nativeId);
     const effective = effectiveSession(session, label);
     const row = q.upsertSession.get(
@@ -149,11 +152,21 @@ export function createWriter(db) {
     for (const stale of existing.values()) q.deletePassage.run(stale.id);
   }
 
-  function writeContent(provider, sourceId, parsed, append, mtime) {
+  // A newer copy of a session may have claimed it earlier in this batch and asked for this
+  // source to be read again in full; an incremental write must not cancel that request.
+  function keepForcedReparse(sourceId, write) {
+    const forced = q.sourceSize.get(sourceId)?.size === -1;
+    const result = write();
+    if (forced) q.forceReparse.run(sourceId);
+    return result;
+  }
+
+  function writeContent(source, sourceId, parsed, append, mtime) {
+    const provider = source.provider;
     const ids = new Map();
     let duplicates = 0;
     for (const session of parsed.sessions) {
-      const id = upsertSession(provider, sourceId, session, mtime);
+      const id = upsertSession(provider, source, sourceId, session, mtime);
       if (id === null) duplicates += 1;
       else ids.set(session.nativeId, id);
     }
@@ -185,21 +198,30 @@ export function createWriter(db) {
       q.deleteSource.run(source.path);
       const { id } = q.insertSource.get(source.path, source.provider, stat.size, stat.mtime, stat.extra ?? '', stat.head ?? null,
         json(parsed.cursor), now, json(parsed.diagnostics));
-      return writeContent(source.provider, id, parsed, false, stat.mtime);
+      return writeContent(source, id, parsed, false, stat.mtime);
     },
 
     appendSource(sourceId, source, stat, parsed, now) {
-      q.updateSource.run(stat.size, stat.mtime, stat.extra ?? '', stat.head ?? null, json(parsed.cursor), now, json(parsed.diagnostics), sourceId);
-      return writeContent(source.provider, sourceId, parsed, true, stat.mtime);
+      return keepForcedReparse(sourceId, () => {
+        q.updateSource.run(stat.size, stat.mtime, stat.extra ?? '', stat.head ?? null, json(parsed.cursor), now, json(parsed.diagnostics), sourceId);
+        return writeContent(source, sourceId, parsed, true, stat.mtime);
+      });
     },
 
     // A partial parse (see builder.mjs) replaces only the sessions it returns or removes.
     updateSource(sourceId, source, stat, parsed, now) {
-      q.updateSource.run(stat.size, stat.mtime, stat.extra ?? '', stat.head ?? null, json(parsed.cursor), now, json(parsed.diagnostics), sourceId);
-      for (const nativeId of [...parsed.removed, ...parsed.sessions.map(session => session.nativeId)]) {
-        q.deleteOwnSession.run(source.provider, nativeId, sourceId);
-      }
-      return writeContent(source.provider, sourceId, parsed, false, stat.mtime);
+      return keepForcedReparse(sourceId, () => {
+        q.updateSource.run(stat.size, stat.mtime, stat.extra ?? '', stat.head ?? null, json(parsed.cursor), now, json(parsed.diagnostics), sourceId);
+        for (const nativeId of parsed.sessions.map(session => session.nativeId)) q.deleteOwnSession.run(source.provider, nativeId, sourceId);
+        // A session this source owned and dropped may still live in a copy elsewhere.
+        const dropped = parsed.removed.reduce((sum, nativeId) => sum + Number(q.deleteOwnSession.run(source.provider, nativeId, sourceId).changes), 0);
+        if (dropped) q.reparseLosers.run();
+        const result = writeContent(source, sourceId, parsed, false, stat.mtime);
+        // Sessions this source holds but another copy owns, counted over the whole source.
+        const duplicates = parsed.total - q.ownedCount.get(sourceId).n;
+        q.setDiagnostics.run(json({ ...parsed.diagnostics, duplicates }), sourceId);
+        return { ...result, duplicates };
+      });
     },
 
     removeSource(path) {

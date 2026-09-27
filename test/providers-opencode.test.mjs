@@ -1,5 +1,7 @@
 import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import * as recall from '../src/recall.mjs';
 import { opencodeProvider } from '../src/providers/opencode.mjs';
@@ -134,4 +136,53 @@ test('a changed database re-indexes only the sessions that changed', async () =>
   assert.deepEqual(await ids('zeppelin cache'), ['ses_grow']);
   assert.deepEqual(await ids('walrus migration'), ['ses_keep']);
   assert.deepEqual(await ids('narwhal report'), []);
+});
+
+test('a partial update reads the same as a full rebuild, even when only a message changed', async () => {
+  home = fakeHome().activate();
+  const file = writeOpencodeDb(home, [{ id: 'ses_a', title: 'Walrus migration', messages: [
+    { id: 'm1', role: 'user', minute: 1, parts: [part.text('plan the walrus migration')] },
+    { id: 'm2', role: 'assistant', minute: 2, modelID: 'gpt-a', parts: [part.text('here is the plan')] },
+  ] }]);
+  await recall.sync();
+  const db = new DatabaseSync(file);
+  db.prepare("UPDATE message SET time_updated = ?, data = ? WHERE id = 'm2'")
+    .run(ms(3), JSON.stringify({ role: 'assistant', time: { created: ms(2) }, modelID: 'gpt-b', summary: true }));
+  db.close();
+  fs.utimesSync(file, 1_800_000_000, 1_800_000_000);
+  const snapshot = async () => {
+    const { session } = await recall.show('ses_a', { sync: 'never' });
+    const { messages } = await recall.read('ses_a', { all: true, outputs: true, sync: 'never' });
+    return { model: session.model, messages: messages.map(m => [m.seq, m.role, m.kind, m.text]) };
+  };
+  await recall.sync();
+  const partial = await snapshot();
+  await recall.sync({ full: true });
+  assert.deepEqual(partial, await snapshot());
+  assert.deepEqual([partial.model, partial.messages[1][2]], ['gpt-b', 'summary']);
+});
+
+test('a database that lost a session to a newer copy takes it back when the copy goes', async () => {
+  home = fakeHome().activate();
+  const main = writeOpencodeDb(home, [{ id: 'ses_walrus', title: 'Walrus migration', messages: [
+    { id: 'm1', role: 'user', minute: 1, parts: [part.text('plan the walrus migration')] },
+  ] }]);
+  const dev = path.join(path.dirname(main), 'opencode-dev.db');
+  fs.copyFileSync(main, dev);
+  fs.utimesSync(dev, 1_700_000_000, 1_700_000_000);
+  fs.utimesSync(main, 1_700_000_100, 1_700_000_100);
+  await recall.sync();
+
+  // The older copy gains another session (a partial update without the shared one) but stays
+  // older, then the owner is deleted.
+  const db = new DatabaseSync(dev);
+  db.prepare(`INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+    VALUES ('ses_zep', 'prj', 'slug', '/work/demo', 'Zeppelin cache', '1', ?, ?)`).run(ms(9), ms(9));
+  db.close();
+  fs.utimesSync(dev, 1_700_000_050, 1_700_000_050);
+  await recall.sync();
+  fs.rmSync(main);
+  await recall.sync();
+  await recall.sync();
+  assert.deepEqual((await recall.search('walrus migration', { sync: 'never' })).hits.map(hit => hit.id), ['ses_walrus']);
 });

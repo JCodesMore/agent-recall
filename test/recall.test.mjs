@@ -187,3 +187,13 @@ test('a Claude transcript names where it ran', async t => {
   assert.equal((await recall.show('ide-1')).session.origin, 'ide');
   assert.equal((await recall.show('cli-2')).session.origin, 'cli');
 });
+
+test('copies with the same modified time keep one owner across syncs', async t => {
+  const home = withHome(t);
+  const records = [claude.user('Rotate the stripe webhook secret', 1), claude.assistant('Rotated.', 2)];
+  for (const slug of ['-work-a', '-work-b']) fs.utimesSync(home.jsonl(project(slug, 'twin-1'), records), 1_700_000_000, 1_700_000_000);
+  await recall.sync();
+  const again = await recall.sync();
+  assert.deepEqual([again.indexed, again.appended], [0, 0]);
+  assert.deepEqual(handles(await recall.search('stripe webhook secret', { sync: 'never' })), ['twin-1']);
+});

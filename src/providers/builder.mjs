@@ -16,6 +16,7 @@ import { emptyDiagnostics, scanJsonl } from './jsonl.mjs';
  *   attachments: [{ sessionNativeId, seq, ordinal, id, kind, mime, bytes, sha256, name, locator }]
  *   cursor:      JSON handed back on the next parse of the same source
  *   partial:     true when only changed sessions are returned; `removed` lists deleted ids
+ *                and `total` counts every session the source holds
  */
 export function sessionState(base) {
   return {
