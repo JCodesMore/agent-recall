@@ -3,7 +3,7 @@ name: agent-recall
 description: Search and read the user's past conversations with Claude Code, Codex, OpenCode and Cursor. Use when the user mentions earlier work or another chat ("we discussed", "last time", "that session", "remember when"), when an answer may already exist in a previous conversation, before asking the user to repeat context, or to catch up on recent work in a project.
 argument-hint: <what to find>
 license: Apache-2.0
-compatibility: Needs Node.js 22.13 or newer. Reads local history only; nothing leaves the machine.
+compatibility: Needs Node.js 22.16 or newer. Reads local history only; nothing leaves the machine.
 allowed-tools: Bash(node:*) Read
 ---
 

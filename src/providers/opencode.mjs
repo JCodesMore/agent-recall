@@ -169,13 +169,14 @@ export const opencodeProvider = {
         messages: db.prepare('SELECT id, time_created, data FROM message WHERE session_id = ? ORDER BY time_created, id'),
         parts: db.prepare('SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY message_id, id'),
       };
-      const version = db.prepare(`SELECT (SELECT count(*) || ':' || coalesce(max(time_updated), 0) FROM message WHERE session_id = ?1)
-        || ':' || (SELECT count(*) || ':' || coalesce(max(time_updated), 0) FROM part WHERE session_id = ?1) AS v`);
+      // Plain ? placeholders: numbered ones (?1) fail to bind before Node 22.23.
+      const version = db.prepare(`SELECT (SELECT count(*) || ':' || coalesce(max(time_updated), 0) FROM message WHERE session_id = ?)
+        || ':' || (SELECT count(*) || ':' || coalesce(max(time_updated), 0) FROM part WHERE session_id = ?) AS v`);
       const previous = cursor?.state?.versions ?? null;
       const versions = {};
       const sessions = [];
       for (const row of db.prepare('SELECT * FROM session ORDER BY time_created, id').all()) {
-        versions[row.id] = `${row.time_updated}:${row.title}:${row.time_archived}:${version.get(row.id).v}`;
+        versions[row.id] = `${row.time_updated}:${row.title}:${row.time_archived}:${version.get(row.id, row.id).v}`;
         if (previous?.[row.id] === versions[row.id]) continue;
         sessions.push(buildSession(row, queries, out, diagnostics));
       }

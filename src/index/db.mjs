@@ -146,6 +146,21 @@ function metaValue(db, key) {
   }
 }
 
+// Some Node builds (23.x, 22 before 22.16) ship SQLite without full-text search.
+export function fullTextSearchError() {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec("CREATE VIRTUAL TABLE probe USING fts5(text, content='', contentless_delete=1)");
+    return null;
+  } catch (error) {
+    const wrapped = new Error(`Node.js ${process.versions.node} was built without SQLite full-text search (${error.message}). Install Node.js 24 LTS from https://nodejs.org`);
+    wrapped.code = 'unsupported_node';
+    return wrapped;
+  } finally {
+    db.close();
+  }
+}
+
 export function openIndex({ file = databasePath(), readonly = false } = {}) {
   if (readonly) {
     if (!fs.existsSync(file)) return null;
@@ -165,7 +180,12 @@ export function openIndex({ file = databasePath(), readonly = false } = {}) {
     db = new DatabaseSync(file);
     configure(db);
   }
-  db.exec(SCHEMA);
+  try {
+    db.exec(SCHEMA);
+  } catch (error) {
+    db.close();
+    throw (/fts5/i.test(error.message) && fullTextSearchError()) || error;
+  }
   db.prepare('INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)').run('index_version', String(APP.INDEX_VERSION));
   return db;
 }

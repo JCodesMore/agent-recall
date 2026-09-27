@@ -8,7 +8,7 @@ import { parseQuery } from './search/query.mjs';
 import { rankConversations } from './search/rank.mjs';
 import { readTranscript, transcriptNotes } from './read/transcript.mjs';
 import { exportTranscript } from './read/export.mjs';
-import { getMeta, openIndex } from './index/db.mjs';
+import { fullTextSearchError, getMeta, openIndex } from './index/db.mjs';
 import { childSessions, findSession, rootResolver, sessionFilter } from './index/sessions.mjs';
 import { syncIndex } from './index/sync.mjs';
 import { currentSessionIds as runningSessionIds, providerById, PROVIDER_LIST } from './providers/registry.mjs';
@@ -281,6 +281,8 @@ export async function doctor() {
   const retention = await claudeRetentionDays(roots);
   const warnings = [];
   if (!nodeSupported()) warnings.push(`Node ${APP.MIN_NODE.major}.${APP.MIN_NODE.minor}+ is required.`);
+  const fts = fullTextSearchError();
+  if (fts) warnings.push(fts.message);
   if ((retention ?? RETENTION.CLAUDE_DEFAULT_DAYS) < RETENTION.WARN_BELOW_DAYS) {
     warnings.push(`Claude Code deletes transcripts after ${retention ?? RETENTION.CLAUDE_DEFAULT_DAYS} days. To keep history, set "cleanupPeriodDays": 36500 in ${roots.claudeSettings}.`);
   }

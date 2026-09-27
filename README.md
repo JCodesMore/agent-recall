@@ -19,7 +19,7 @@ or Cursor, then brings what matters into the work you are doing now.
 
 ## Get started
 
-You need [Node.js](https://nodejs.org/) 22.13 or newer (the "LTS" download is fine).
+You need [Node.js](https://nodejs.org/) 22.16 or newer (the "LTS" download is fine).
 
 Paste this to any AI coding agent that can run commands:
 

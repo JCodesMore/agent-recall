@@ -56,7 +56,7 @@ src/shared/          config, paths, ids, text helpers
 
 ## Code
 
-- Plain ESM JavaScript on Node >= 22.13, no runtime dependencies, `node:sqlite` for storage.
+- Plain ESM JavaScript on Node >= 22.16 (or 24+; see `APP.MIN_NODE`), no runtime dependencies, `node:sqlite` for storage.
 - Files under 400 lines, guard clauses, named constants, comments only for a non-obvious why.
 - Bump `INDEX_VERSION` in `src/shared/config.mjs` whenever normalized output changes, so
   existing indexes rebuild instead of mixing shapes.

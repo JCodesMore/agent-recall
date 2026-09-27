@@ -13,7 +13,8 @@ export const APP = Object.freeze({
   INDEX_VERSION: 2,
   DB_FILE: 'recall-v1.db',
   LEGACY_DB_FILES: ['agent-recall.db', 'agent-recall.db-wal', 'agent-recall.db-shm'],
-  MIN_NODE: Object.freeze({ major: 22, minor: 13 }),
+  // node:sqlite ships FTS5 from 22.16 and 24.0; Node 23 lacks it (caught when the index opens).
+  MIN_NODE: Object.freeze({ major: 22, minor: 16 }),
 });
 
 export function nodeSupported(version = process.versions.node) {
