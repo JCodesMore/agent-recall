@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Stable entry point: skills, hooks and other tools call this path.
 
-const [major, minor] = process.versions.node.split('.').map(Number);
-if (major < 22 || (major === 22 && minor < 13)) {
-  process.stderr.write(`Agent Recall needs Node.js 22.13 or newer (found ${process.versions.node}). Install the current LTS from https://nodejs.org\n`);
+// config.mjs uses only syntax old Node versions can load, so the version check can read it.
+const { APP, nodeSupported } = await import('../src/shared/config.mjs');
+if (!nodeSupported()) {
+  process.stderr.write(`Agent Recall needs Node.js ${APP.MIN_NODE.major}.${APP.MIN_NODE.minor} or newer (found ${process.versions.node}). Install the current LTS from https://nodejs.org\n`);
   process.exit(1);
 }
 

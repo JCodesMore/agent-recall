@@ -1,5 +1,5 @@
-import { PROVIDER_LABELS } from '../shared/config.mjs';
-import { HANDLE_LENGTH, sessionHandle } from '../shared/ids.mjs';
+import { LIMITS, PROVIDER_LABELS } from '../shared/config.mjs';
+import { sessionHandle } from '../shared/ids.mjs';
 import { comparablePath, projectName } from '../shared/paths.mjs';
 import { PASSAGE_FLAGS, buildPassages } from './passages.mjs';
 
@@ -88,7 +88,7 @@ export function createWriter(db) {
   };
 
   function handleFor(provider, nativeId) {
-    for (let length = HANDLE_LENGTH; length <= 16; length += 1) {
+    for (let length = LIMITS.HANDLE_LENGTH; length <= LIMITS.HANDLE_MAX_LENGTH; length += 1) {
       const handle = sessionHandle(provider, nativeId, length);
       const owner = q.findHandle.get(handle);
       if (!owner || (owner.provider === provider && owner.native_id === nativeId)) return handle;

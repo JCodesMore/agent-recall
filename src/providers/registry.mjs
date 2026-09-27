@@ -10,6 +10,8 @@ import { opencodeProvider } from './opencode.mjs';
  *   labels(roots) -> label[]        optional; titles, archive flags and parents kept outside transcripts
  *   parse(source, cursor) -> parsed see builder.mjs for the normalized shape
  *   readAttachment(source, locator) -> { mime, data: Buffer } | null
+ *   currentSessionEnv               optional; env vars holding the running session's native id
+ *   refFromLink(text) -> id | null  optional; native id from a provider link (codex://threads/<id>)
  */
 export const PROVIDER_LIST = Object.freeze([claudeProvider, codexProvider, opencodeProvider, cursorProvider]);
 
@@ -17,6 +19,18 @@ const byId = new Map(PROVIDER_LIST.map(provider => [provider.id, provider]));
 
 export function providerById(id) {
   return byId.get(id) ?? null;
+}
+
+export function currentSessionIds(env) {
+  return PROVIDER_LIST.flatMap(provider => (provider.currentSessionEnv ?? []).map(name => env[name])).filter(Boolean);
+}
+
+export function refFromLink(text) {
+  for (const provider of PROVIDER_LIST) {
+    const id = provider.refFromLink?.(text);
+    if (id) return { ref: id, provider: provider.id };
+  }
+  return null;
 }
 
 // `ids` may be undefined (all), or a list of provider ids; unknown ids throw so typos surface.

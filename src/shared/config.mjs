@@ -10,11 +10,16 @@ export const APP = Object.freeze({
   // JSON output contract. Bump only when a field is removed or changes meaning.
   JSON_SCHEMA: 3,
   // Bump when normalized provider output or passage building changes; indexes then rebuild.
-  INDEX_VERSION: 1,
+  INDEX_VERSION: 2,
   DB_FILE: 'recall-v1.db',
   LEGACY_DB_FILES: ['agent-recall.db', 'agent-recall.db-wal', 'agent-recall.db-shm'],
   MIN_NODE: Object.freeze({ major: 22, minor: 13 }),
 });
+
+export function nodeSupported(version = process.versions.node) {
+  const [major, minor] = String(version).split('.').map(Number);
+  return major > APP.MIN_NODE.major || (major === APP.MIN_NODE.major && minor >= APP.MIN_NODE.minor);
+}
 
 export const PROVIDERS = Object.freeze({
   CLAUDE: 'claude',
@@ -53,6 +58,13 @@ export const LIMITS = Object.freeze({
   ATTACHMENT_MAX_BYTES: 16 * 1024 * 1024,
   // Indexing
   PASSAGE_MAX_CHARS: 6_000,
+  HANDLE_LENGTH: 7,
+  // Handles grow past HANDLE_LENGTH only on a collision.
+  HANDLE_MAX_LENGTH: 16,
+  // Parent links followed when resolving a subagent's root conversation.
+  MAX_PARENT_DEPTH: 8,
+  // Shortest id prefix accepted as a session reference.
+  MIN_REF_PREFIX: 4,
   // Search
   QUERY_MAX_CHARS: 2_000,
   QUERY_MAX_TERMS: 16,
@@ -65,6 +77,9 @@ export const LIMITS = Object.freeze({
   // Reading
   READ_BUDGET_CHARS: 24_000,
   READ_MAX_BUDGET_CHARS: 200_000,
+  READ_MIN_BUDGET_CHARS: 1_000,
+  // Characters charged per message for its header line when filling a page.
+  READ_MESSAGE_OVERHEAD_CHARS: 40,
   READ_CONTEXT_BEFORE: 3,
   READ_GREP_CONTEXT: 1,
   RECENT_DEFAULT: 10,
@@ -109,6 +124,7 @@ export const SYNC = Object.freeze({
   HEAD_BYTES: 512,
   // Commit a transaction after this many parsed bytes during a full index.
   BATCH_BYTES: 64 * 1024 * 1024,
+  BATCH_SOURCES: 500,
 });
 
 export const RETENTION = Object.freeze({

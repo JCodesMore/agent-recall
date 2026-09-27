@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { APP, LIMITS, RETENTION, SYNC, VERSION } from './shared/config.mjs';
+import { APP, LIMITS, nodeSupported, RETENTION, SYNC, VERSION } from './shared/config.mjs';
 import { databasePath, sourceRoots } from './shared/paths.mjs';
 import { parseQuery } from './search/query.mjs';
 import { rankConversations } from './search/rank.mjs';
@@ -11,7 +11,7 @@ import { exportTranscript } from './read/export.mjs';
 import { getMeta, openIndex } from './index/db.mjs';
 import { childSessions, findSession, rootResolver, sessionFilter } from './index/sessions.mjs';
 import { syncIndex } from './index/sync.mjs';
-import { providerById, PROVIDER_LIST } from './providers/registry.mjs';
+import { currentSessionIds as runningSessionIds, providerById, PROVIDER_LIST } from './providers/registry.mjs';
 import { claudeRetentionDays } from './providers/claude.mjs';
 
 const CLI = fileURLToPath(new URL('../scripts/recall.mjs', import.meta.url));
@@ -131,7 +131,7 @@ function withIndex(work) {
 
 function currentSessionIds(options) {
   if (options.includeCurrent) return new Set();
-  const ids = [process.env.CLAUDE_CODE_SESSION_ID, process.env.CODEX_THREAD_ID, ...(options.exclude ?? [])].filter(Boolean);
+  const ids = [...runningSessionIds(process.env), ...(options.exclude ?? [])].filter(Boolean);
   return new Set(ids.map(String));
 }
 
@@ -280,7 +280,7 @@ export async function doctor() {
   }
   const retention = await claudeRetentionDays(roots);
   const warnings = [];
-  if (!process.versions.node || Number(process.versions.node.split('.')[0]) < APP.MIN_NODE.major) warnings.push(`Node ${APP.MIN_NODE.major}.${APP.MIN_NODE.minor}+ is required.`);
+  if (!nodeSupported()) warnings.push(`Node ${APP.MIN_NODE.major}.${APP.MIN_NODE.minor}+ is required.`);
   if ((retention ?? RETENTION.CLAUDE_DEFAULT_DAYS) < RETENTION.WARN_BELOW_DAYS) {
     warnings.push(`Claude Code deletes transcripts after ${retention ?? RETENTION.CLAUDE_DEFAULT_DAYS} days. To keep history, set "cleanupPeriodDays": 36500 in ${roots.claudeSettings}.`);
   }

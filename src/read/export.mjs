@@ -24,8 +24,11 @@ export function exportTranscript(db, session, out, { subagents = true } = {}) {
   if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, `${slug(session.title)}-${session.handle}.md`);
   const parts = [section(db, session, 0)];
   if (subagents) {
+    const seen = new Set([session.id]);
     const walk = (parent, depth) => {
       for (const child of childSessions(db, parent)) {
+        if (seen.has(child.id)) continue;
+        seen.add(child.id);
         parts.push(section(db, child, depth));
         walk(child, depth + 1);
       }

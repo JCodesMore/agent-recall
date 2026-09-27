@@ -179,3 +179,11 @@ test('read handles out-of-range pages and shows output matches', async t => {
   assert.equal((await recall.read('edge-1', { from: 999 })).messages.length, 0);
   assert.equal((await recall.read('edge-1', { last: 0 })).messages.length, 0);
 });
+
+test('a Claude transcript names where it ran', async t => {
+  const home = withHome(t);
+  home.jsonl(project('-work-ide', 'ide-1'), [claude.user('Rename the pelican module', 1, { entrypoint: 'claude-vscode' }), claude.assistant('Renamed.', 2)]);
+  home.jsonl(project('-work-cli', 'cli-2'), [claude.user('Rename the heron module', 1), claude.assistant('Renamed.', 2)]);
+  assert.equal((await recall.show('ide-1')).session.origin, 'ide');
+  assert.equal((await recall.show('cli-2')).session.origin, 'cli');
+});

@@ -46,7 +46,7 @@ function takeBudget(messages, start, budget) {
   const page = [];
   let used = 0;
   for (let i = start; i < messages.length; i += 1) {
-    const size = messages[i].text.length + 40;
+    const size = messages[i].text.length + LIMITS.READ_MESSAGE_OVERHEAD_CHARS;
     if (page.length && used + size > budget) break;
     page.push(messages[i]);
     used += size;
@@ -77,7 +77,7 @@ export function readTranscript(db, session, options = {}) {
   const outputs = options.outputs ?? (Boolean(options.grep) || (Number.isInteger(options.at) && isOutput(db, session.id, options.at)));
   const messages = loadMessages(db, session.id, { tools, outputs });
   const total = db.prepare('SELECT count(*) AS n FROM messages WHERE session_id = ?').get(session.id).n;
-  const budget = options.all ? Infinity : Math.min(Math.max(1_000, options.maxChars ?? LIMITS.READ_BUDGET_CHARS), LIMITS.READ_MAX_BUDGET_CHARS);
+  const budget = options.all ? Infinity : Math.min(Math.max(LIMITS.READ_MIN_BUDGET_CHARS, options.maxChars ?? LIMITS.READ_BUDGET_CHARS), LIMITS.READ_MAX_BUDGET_CHARS);
 
   if (options.grep) {
     const { indexes, hits } = grepWindow(messages, options.grep, options.context ?? LIMITS.READ_GREP_CONTEXT);

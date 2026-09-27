@@ -97,6 +97,9 @@ function handleAssistant(state, record, out) {
   }
 }
 
+// Transcript `entrypoint` values mapped to the origin names other providers use.
+const ENTRYPOINT_ORIGINS = { 'claude-desktop': 'desktop', 'claude-vscode': 'ide', cli: 'cli' };
+
 const parser = {
   init(source) {
     const meta = source.meta ?? {};
@@ -122,7 +125,7 @@ const parser = {
   record(state, record, position, out) {
     if (typeof record.cwd === 'string' && record.cwd) state.cwd = record.cwd;
     if (typeof record.gitBranch === 'string' && record.gitBranch && record.gitBranch !== 'HEAD') state.gitBranch = record.gitBranch;
-    if (!state.origin && typeof record.entrypoint === 'string') state.origin = record.entrypoint === 'claude-desktop' ? 'desktop' : record.entrypoint;
+    if (!state.origin && typeof record.entrypoint === 'string') state.origin = ENTRYPOINT_ORIGINS[record.entrypoint] ?? (record.entrypoint.startsWith('sdk') ? 'sdk' : record.entrypoint);
     switch (record.type) {
       case 'user':
         if (record.isMeta !== true) handleUser(state, record, position, out);
@@ -230,11 +233,12 @@ async function desktopSessionFiles(root) {
 
 export const claudeProvider = {
   id: PROVIDER,
+  currentSessionEnv: ['CLAUDE_CODE_SESSION_ID'],
 
   async discover(roots) {
     const cowork = (await desktopSessionFiles(roots.claudeCowork)).filter(item => typeof item === 'object');
     const all = await Promise.all([
-      projectSources(roots.claudeProjects, 'cli'),
+      projectSources(roots.claudeProjects, null),
       ...cowork.map(item => projectSources(path.join(item.dir, '.claude', 'projects'), 'cowork')),
     ]);
     return all.flat();

@@ -1,10 +1,9 @@
 import path from 'node:path';
-import { PROVIDERS } from '../shared/config.mjs';
+import { LIMITS, PROVIDERS } from '../shared/config.mjs';
 import { comparablePath } from '../shared/paths.mjs';
+import { refFromLink } from '../providers/registry.mjs';
 
 const PROVIDER_IDS = new Set(Object.values(PROVIDERS));
-const MAX_DEPTH = 8;
-const MIN_PREFIX = 4;
 const SESSION_COLUMNS = 's.*, src.path AS source_path, src.mtime AS source_mtime';
 
 function escapeLike(value) {
@@ -68,7 +67,7 @@ export function rootResolver(db) {
     session: id => load(id),
     root(id) {
       let row = load(id);
-      for (let depth = 0; row?.parent_native_id && depth < MAX_DEPTH; depth += 1) {
+      for (let depth = 0; row?.parent_native_id && depth < LIMITS.MAX_PARENT_DEPTH; depth += 1) {
         const parent = parentOf(row);
         if (!parent) break;
         row = parent;
@@ -81,8 +80,8 @@ export function rootResolver(db) {
 function normalizeRef(raw) {
   let ref = String(raw ?? '').trim();
   let provider = null;
-  const threadUrl = ref.match(/^codex:\/\/threads\/(.+)$/i);
-  if (threadUrl) return { ref: threadUrl[1], provider: PROVIDERS.CODEX };
+  const linked = refFromLink(ref);
+  if (linked) return linked;
   const prefixed = ref.match(/^([a-z]+):(.+)$/i);
   if (prefixed && PROVIDER_IDS.has(prefixed[1].toLowerCase())) {
     provider = prefixed[1].toLowerCase();
@@ -93,7 +92,7 @@ function normalizeRef(raw) {
 
 /**
  * Finds a session by handle, native id, unique prefix of either, provider-qualified id,
- * codex:// thread link, or transcript path. Returns { session } or { candidates } when the
+ * provider link (codex://threads/<id>), or transcript path. Returns { session } or { candidates } when the
  * reference is ambiguous, or {} when nothing matches.
  */
 export function findSession(db, raw) {
@@ -112,7 +111,7 @@ export function findSession(db, raw) {
     if (byPath.length) return { session: byPath.find(row => row.kind === 'main') ?? byPath[0] };
   }
 
-  if (ref.length < MIN_PREFIX) return {};
+  if (ref.length < LIMITS.MIN_REF_PREFIX) return {};
   const like = `${escapeLike(ref.toLowerCase())}%`;
   const prefix = db.prepare(select(`(lower(s.handle) LIKE ? ESCAPE '\\' OR lower(s.native_id) LIKE ? ESCAPE '\\')${scoped} LIMIT 10`)).all(like, like, ...scope);
   return pick(prefix) ?? {};

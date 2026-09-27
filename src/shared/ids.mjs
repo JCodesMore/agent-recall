@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
+import { LIMITS } from './config.mjs';
 
 // Crockford-style alphabet without look-alike characters, all lower case.
 const HANDLE_ALPHABET = '0123456789abcdefghjkmnpqrstvwxyz';
-export const HANDLE_LENGTH = 7;
 
 export function sha256(...parts) {
   return crypto.createHash('sha256').update(parts.map(part => String(part ?? '')).join('\0')).digest();
@@ -13,7 +13,7 @@ export function hashHex(...parts) {
 }
 
 // Stable short id for a session. Collisions extend the handle one character at a time.
-export function sessionHandle(provider, nativeId, length = HANDLE_LENGTH) {
+export function sessionHandle(provider, nativeId, length = LIMITS.HANDLE_LENGTH) {
   const digest = sha256(provider, nativeId);
   let bits = 0n;
   for (const byte of digest.subarray(0, 10)) bits = (bits << 8n) | BigInt(byte);
@@ -23,10 +23,6 @@ export function sessionHandle(provider, nativeId, length = HANDLE_LENGTH) {
     bits >>= 5n;
   }
   return handle;
-}
-
-export function looksLikeHandle(value) {
-  return /^[0-9a-hjkmnp-tv-z]{7,16}$/.test(value);
 }
 
 export function asIso(value) {

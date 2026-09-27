@@ -351,6 +351,9 @@ function storedTitle(row) {
 
 export const codexProvider = {
   id: PROVIDER,
+  // Codex also sets CODEX_SESSION_ID, but the thread id is what names the rollout.
+  currentSessionEnv: ['CODEX_THREAD_ID'],
+  refFromLink: text => text.match(/^codex:\/\/threads\/(.+)$/i)?.[1] ?? null,
 
   async discover(roots) {
     const [active, archived] = await Promise.all([rollouts(roots.codexSessions, {}), rollouts(roots.codexArchived, { archived: true })]);

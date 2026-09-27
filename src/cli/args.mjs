@@ -100,12 +100,14 @@ export function parseArgs(command, argv) {
 
 const UNITS = { h: 3_600_000, d: 86_400_000, w: 604_800_000, m: 2_592_000_000, y: 31_536_000_000 };
 
-// Accepts ISO dates and relative ages such as 36h, 7d, 2w, 3m, 1y.
+// Accepts ISO dates and relative ages such as 36h, 7d, 2w, 3m, 1y. A bare date given to
+// --until means the end of that day, so `--until 2026-01-31` includes the 31st.
 export function parseWhen(flag, value, now = Date.now()) {
   if (value === undefined) return undefined;
   const relative = String(value).trim().match(/^(\d+)\s*([hdwmy])$/i);
   if (relative) return new Date(now - Number(relative[1]) * UNITS[relative[2].toLowerCase()]).toISOString();
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) throw new UsageError(`--${flag} takes a date (2026-01-31) or an age (7d, 2w, 3m).`);
+  if (flag === 'until' && /^\d{4}-\d{2}-\d{2}$/.test(String(value).trim())) return new Date(date.getTime() + UNITS.d - 1).toISOString();
   return date.toISOString();
 }
