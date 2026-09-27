@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+## 1.0.0
+
+A rewrite built from how agents actually used 0.6 (1,065 recall calls on real machines).
+
+- **Finds more.** Searches rank whole conversations from turn-sized passages, so words spread
+  across a chat add up instead of failing an all-words-in-one-message test. Tool calls, file
+  names, commands and error output are searchable. Subagent work counts toward its parent
+  chat; copies of the same history in forks count once.
+- **Ranks better.** The chat you are in is left out, chats that only asked for a
+  conversation rank below it, and the current project is a boost rather than a filter.
+  Real titles come from the Claude desktop app, `/rename`, Codex thread names and Cursor.
+  Injected harness text is no longer indexed or used as a title.
+- **Reads everything.** `read` pages through a whole conversation by message number, with
+  `--at`, `--from`, `--last`, `--grep`, and `--out` to export it with its subagents.
+- **Sees more.** Adds Cursor, Claude desktop and Cowork sessions, nested subagent folders,
+  Codex subagent threads and titles.
+- **Faster.** Growing transcripts are read from where the last sync stopped; a search with
+  nothing new answers in about 0.2 s. Big backlogs finish in the background.
+- **Easier.** Short handles (`abc1234`) plus native ids, prefixes, `codex:<id>` and
+  `codex://threads/<id>`; compact text output with the next command to run; `--stdin` for
+  queries that are hard to quote; suggestions for mistyped commands and options.
+- **One skill.** The root `SKILL.md` is the only skill file for every agent and the Claude
+  plugin. The installer keeps files you add to the skill folder.
+- Commands `context`, `transcript`, `session` and `status` still work as aliases.
+  `search --json` keeps `hits[].score` and adds `completeness.complete`.
+- Removed: the redaction layer (the index holds the same text as the history files it reads)
+  and hook-based activity tracking (results mark conversations written in the last minutes as
+  active instead).
+
 ## 0.6.0
 
 - Fixed Codex parent/child identity so Agent Recall opens the conversation that actually matched.

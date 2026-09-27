@@ -128,7 +128,7 @@ function startFirstIndex(dir) {
  * OpenCode, Cursor and others) and a link from ~/.claude/skills. Idempotent; keeps files it
  * did not write. `targets` replaces the defaults with explicit folders.
  */
-export async function install({ targets, dryRun = false, uninstall = false, home, index = true } = {}) {
+export async function install({ targets, dryRun = false, uninstall = false, agentsOnly = false, home, index = true } = {}) {
   const files = SHIPPED.flatMap(listFiles);
   const defaults = defaultTargets(home);
   const explicit = targets?.map(target => path.resolve(target));
@@ -150,7 +150,7 @@ export async function install({ targets, dryRun = false, uninstall = false, home
     installCopy(dir, files, actions, dryRun);
   }
   if (!explicit) {
-    for (const link of defaults.links) installLink(link, defaults.primary, files, actions, dryRun);
+    if (!agentsOnly) for (const link of defaults.links) installLink(link, defaults.primary, files, actions, dryRun);
     for (const legacy of defaults.legacy) removeOwned(legacy, actions, dryRun);
   }
   if (!dryRun && index) startFirstIndex(explicit?.[0] ?? defaults.primary);

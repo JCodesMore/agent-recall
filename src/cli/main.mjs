@@ -97,7 +97,7 @@ async function run(command, flags, positional, json) {
       return [await recall.attachment(one('attachment id'), { out: flags.out, sync: flags['no-sync'] ? 'never' : 'auto' }), renderAttachment];
     case 'install': {
       const { install, renderInstall } = await import('../install/install.mjs');
-      return [await install({ targets: flags.target, dryRun: flags['dry-run'], uninstall: flags.uninstall }), renderInstall];
+      return [await install({ targets: flags.target, dryRun: flags['dry-run'], uninstall: flags.uninstall, agentsOnly: flags['agents-only'] }), renderInstall];
     }
     default:
       throw new UsageError(`Unknown command ${command}.`);

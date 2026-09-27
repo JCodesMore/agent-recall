@@ -14,7 +14,7 @@ export const COMMANDS = {
   sync: { ...COMMON, provider: 'list', full: 'bool', quiet: 'bool' },
   doctor: { ...COMMON },
   attachment: { ...COMMON, out: 'value' },
-  install: { ...COMMON, target: 'list', 'dry-run': 'bool', uninstall: 'bool' },
+  install: { ...COMMON, target: 'list', 'dry-run': 'bool', uninstall: 'bool', 'agents-only': 'bool' },
   help: { ...COMMON },
 };
 

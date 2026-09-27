@@ -4,13 +4,14 @@
 
 ### Give your AI agents memory across chats
 
-Search past conversations from Claude Code, Codex, and OpenCode—then bring the useful context into whatever you are working on now.
+Your agent finds and reads any past conversation you had with Claude Code, Codex, OpenCode
+or Cursor, then brings what matters into the work you are doing now.
 
 [![Stars](https://img.shields.io/github/stars/JCodesMore/agent-recall?style=flat)](https://github.com/JCodesMore/agent-recall/stargazers)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/hrTSX5yTpB)
 
-[Get started](#get-started) · [See what it can do](#what-can-it-do) · [Privacy](#private-by-default)
+[Get started](#get-started) · [What it can do](#what-can-it-do) · [Privacy](#private-by-default)
 
 </div>
 
@@ -18,13 +19,14 @@ Search past conversations from Claude Code, Codex, and OpenCode—then bring the
 
 ## Get started
 
-Requires [Node.js](https://nodejs.org/) 22.13 or newer.
+You need [Node.js](https://nodejs.org/) 22.13 or newer (the "LTS" download is fine).
 
-Give this to an AI coding agent with terminal access:
+Paste this to any AI coding agent that can run commands:
 
 > Install https://github.com/JCodesMore/agent-recall on this machine.
 
-Restart the agent after installation. That is it—you can ask naturally whenever an older conversation would help.
+Then start a new chat. That is it: ask naturally whenever an older conversation would help.
+The first search spends a minute or so reading your history; after that answers are instant.
 
 <details>
 <summary><b>Prefer to install it yourself?</b></summary>
@@ -38,78 +40,84 @@ Run these inside Claude Code:
 /plugin install agent-recall@jcodesmore-plugins
 ```
 
-### Standalone skill
+### Any agent (Codex, OpenCode, Cursor, Claude Code)
 
 ```bash
 git clone https://github.com/JCodesMore/agent-recall.git
-cd agent-recall
-node scripts/install.mjs
+node agent-recall/scripts/recall.mjs install
 ```
 
-Use `node scripts/install.mjs --agents-only` to install for Codex and OpenCode without adding the standalone Claude Code skill.
+This puts one copy in `~/.agents/skills/agent-recall` and links it into
+`~/.claude/skills`. Run the same command again to update; files you added to that folder are
+kept. `--agents-only` skips the Claude link, `--uninstall` removes it.
+
+Using the [skills CLI](https://skills.sh)? `npx skills add JCodesMore/agent-recall` works too.
 
 </details>
 
 ## What can it do?
 
-These are the kinds of requests Agent Recall is built for:
+Ask in your own words. These all work:
 
-> **“/agent-recall find how we designed the UI/UX for our last project, so we can do it again for this one.”**
+> **"Find how we designed the UI for our last project, so we can do it again here."**
 
-> **“/agent-recall catch me up on everything we changed in the last 24 hours across all my agents.”**
+> **"Catch me up on everything I changed in the last 24 hours across all my agents."**
 
-> **“/agent-recall find how we fixed this same bug before and apply the fix here.”**
+> **"We fixed this exact error before. Find how, and apply the fix here."**
 
-> **“/agent-recall find the screenshot I shared when we designed this page.”**
+> **"Find the screenshot I shared when we designed this page."**
 
-> **“/agent-recall find the chat where we stopped building this feature, then tell me what is finished and what is left.”**
+> **"Find the chat where we stopped building this feature and tell me what is left."**
 
-> **“/agent-recall find and reopen my old Codex conversation about Spanish practice.”**
+> **"Reopen my old Codex conversation about Spanish practice."**
 
-You do not need to remember which agent you used, the chat title, or where its history is stored. Describe what you remember and Agent Recall searches your local Claude Code, Codex, and OpenCode conversations for the relevant context.
+You do not need to remember which agent you used, what the chat was called, or where it was
+saved. Agent Recall searches every conversation on this computer, including archived chats,
+subagent work, the commands that ran and the errors they printed. Your agent can then read
+the whole conversation, not just a snippet.
 
-It can also recover supported images and files from old chats. In Codex desktop, it can restore an archived task and open the original conversation.
+In Claude Code you can also type `/agent-recall` followed by what you are looking for.
 
 ## Private by default
 
-Your searchable index stays on your computer. Agent Recall does not upload your history to its own service and does not need an account, API key, or embedding service.
-
-It indexes user and assistant conversation text—not system prompts, private reasoning, tool logs, or patches. Common credentials and private keys are redacted before text enters the index. Attachments are extracted only when requested.
+Everything stays on your computer. Agent Recall reads the history files your agents already
+keep, builds a search index next to them, and never uploads anything. No account, API key or
+cloud service.
 
 <details>
 <summary><b>How it works</b></summary>
 
-The first search builds a local SQLite index. Later searches refresh only the history that changed. Results include the source agent, project, time, and surrounding messages so your current agent can use the earlier work in context.
+A small local SQLite index covers each conversation's messages, tool calls, the start and
+end of tool output, titles and folders. Searches rank whole conversations, so words spread
+across a long chat still find it, and your current project comes first. After the first run,
+only new messages are read, so a search takes well under a second.
 
-Default history locations:
-
-| App | Conversation history |
+| App | History it reads |
 |---|---|
-| Claude Code | `~/.claude/projects/**/*.jsonl` |
-| Codex | `~/.codex/sessions/**/*.jsonl` and `~/.codex/archived_sessions` |
-| OpenCode | `${XDG_DATA_HOME:-~/.local/share}/opencode/opencode*.db` |
+| Claude Code | `~/.claude/projects`, desktop app titles, Cowork sessions, subagents |
+| Codex | `~/.codex/sessions`, archived sessions, thread titles, subagent threads |
+| OpenCode | `~/.local/share/opencode/opencode.db` |
+| Cursor | `~/.cursor/projects/*/agent-transcripts`, chat titles |
+
+Claude Code deletes transcripts after 30 days unless you change `cleanupPeriodDays` in
+`~/.claude/settings.json`. `doctor` warns you when that applies.
 
 </details>
 
 <details>
-<summary><b>Use the CLI directly</b></summary>
-
-Every command supports `--json` output for agents and scripts:
+<summary><b>Use it from the terminal</b></summary>
 
 ```bash
-node scripts/recall.mjs doctor --json
-node scripts/recall.mjs search --json --cwd . --limit 5 -- "database migration"
-node scripts/recall.mjs context --json <hit-id>
-node scripts/recall.mjs session --json <session-key>
-node scripts/recall.mjs transcript --json --limit 20 --offset 0 <session-key>
-node scripts/recall.mjs attachments --json <message-key>
-node scripts/recall.mjs attachment --json --output ./attachment.png <attachment-key>
-node scripts/recall.mjs recent --json --cwd . --limit 10
-node scripts/recall.mjs status --json
-node scripts/recall.mjs sync --json
+node scripts/recall.mjs search -- database migration rollback
+node scripts/recall.mjs read abc1234 --at 42
+node scripts/recall.mjs read abc1234 --out transcript.md
+node scripts/recall.mjs recent --since 2d
+node scripts/recall.mjs show abc1234
+node scripts/recall.mjs doctor
 ```
 
-Run `node scripts/recall.mjs --help` for every option. Set `AGENT_RECALL_HOME` to choose a different index location.
+Add `--json` to any command for scripts. `--help` lists every option. Set
+`AGENT_RECALL_HOME` to keep the index somewhere else.
 
 </details>
 
@@ -120,11 +128,11 @@ Run `node scripts/recall.mjs --help` for every option. Set `AGENT_RECALL_HOME` t
 ## Development
 
 ```bash
-npm test
-npm run doctor
+npm run check
 ```
 
-Tests use synthetic conversation history only.
+That runs the tests and the recall benchmark. Both use synthetic history only. Start with
+[AGENTS.md](AGENTS.md).
 
 ## License
 
