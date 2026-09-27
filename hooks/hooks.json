@@ -6,35 +6,13 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs", "start"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/recall.mjs",
+              "sync",
+              "--quiet"
+            ],
             "async": true,
-            "timeout": 30
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs", "prompt"],
-            "async": true,
-            "timeout": 30
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs", "stop"],
-            "async": true,
-            "timeout": 30
+            "timeout": 600
           }
         ]
       }

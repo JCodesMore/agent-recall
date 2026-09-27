@@ -1,27 +1,29 @@
 {
   "name": "@jcodesmore/agent-recall",
-  "version": "0.6.0",
-  "description": "Let your AI agents find any conversation you've had across Claude Code, Codex, and OpenCode.",
+  "version": "1.0.0",
+  "description": "Let your AI agents find and read any past conversation from Claude Code, Codex, OpenCode and Cursor.",
   "type": "module",
   "private": true,
   "bin": {
     "agent-recall": "./scripts/recall.mjs"
   },
   "engines": {
-    "node": ">=22.13"
+    "node": "^22.16 || >=24"
   },
   "scripts": {
     "recall": "node ./scripts/recall.mjs",
     "sync": "node ./scripts/recall.mjs sync",
     "doctor": "node ./scripts/recall.mjs doctor",
-    "install-skill": "node ./scripts/install.mjs",
-    "test": "node --test test/*.test.mjs",
-    "test:watch": "node --test --watch test/*.test.mjs"
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.mjs",
+    "eval": "node --disable-warning=ExperimentalWarning ./test/eval/run.mjs",
+    "eval:local": "node --disable-warning=ExperimentalWarning ./test/eval/local.mjs",
+    "check": "npm test && npm run eval"
   },
   "files": [
     ".claude-plugin",
     "SKILL.md",
-    "skills",
+    "agents",
+    "references",
     "hooks",
     "scripts",
     "src",
@@ -40,6 +42,7 @@
     "claude-code",
     "codex",
     "opencode",
+    "cursor",
     "conversation-search",
     "session-history",
     "local-first"

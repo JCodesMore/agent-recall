@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+## 1.0.0
+
+A rewrite built from how agents actually used 0.6 (1,065 recall calls on real machines).
+
+On this author's real history (37 questions agents had asked about past chats), the right
+conversation comes first 62% of the time and in the top five 92% (0.6: 24% and 38%).
+
+- **Finds more.** Searches rank whole conversations from turn-sized passages, so words spread
+  across a chat add up instead of failing an all-words-in-one-message test. Tool calls, file
+  names, commands and error output are searchable. Subagent work counts toward its parent
+  chat; copies of the same history in forks count once.
+- **Ranks better.** The chat you are in is left out, chats that only asked for a
+  conversation rank below it, and the current project is a boost rather than a filter.
+  Real titles come from the Claude desktop app, `/rename`, Codex thread names and Cursor.
+  Injected harness text is no longer indexed or used as a title.
+- **Reads everything.** `read` pages through a whole conversation by message number, with
+  `--at`, `--from`, `--last`, `--grep`, and `--out` to export it with its subagents.
+- **Sees more.** Adds Cursor, Claude desktop and Cowork sessions, nested subagent folders,
+  Codex subagent threads and titles.
+- **Faster.** Growing transcripts are read from where the last sync stopped; a search with
+  nothing new answers in about 0.2 s. Big backlogs finish in the background, newest chats
+  first. A running OpenCode no longer causes a full re-index on every sync.
+- **Easier.** Short handles (`abc1234`) plus native ids, prefixes, `codex:<id>` and
+  `codex://threads/<id>`; compact text output with the next command to run; `--stdin` for
+  queries that are hard to quote; suggestions for mistyped commands and options.
+- **Other computers.** With a `peers.json`, `search --peers all` and `recent --peers all`
+  also ask your other computers over SSH, and `read --peer NAME` opens what they found.
+- **One skill.** The root `SKILL.md` is the only skill file for every agent and the Claude
+  plugin. The installer keeps files you add to the skill folder.
+- Needs Node.js 22.16+ or 24+ (earlier builds lack SQLite full-text search). Tested on
+  Windows, macOS and Linux in CI.
+- Commands `context`, `transcript`, `session` and `status` still work as aliases.
+  `search --json` keeps `hits[].score` and adds `completeness.complete`.
+- Removed: the redaction layer (the index holds the same text as the history files it reads)
+  and hook-based activity tracking (results mark conversations written in the last minutes as
+  active instead).
+
 ## 0.6.0
 
 - Fixed Codex parent/child identity so Agent Recall opens the conversation that actually matched.

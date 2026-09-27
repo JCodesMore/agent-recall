@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "agent-recall",
-  "description": "Let your AI agent find any conversation you've had across Claude Code, Codex, and OpenCode.",
-  "version": "0.6.0",
+  "description": "Let your AI agents find and read any past conversation from Claude Code, Codex, OpenCode and Cursor.",
+  "version": "1.0.0",
   "author": {
     "name": "JCodesMore",
     "url": "https://github.com/JCodesMore"
@@ -13,10 +13,15 @@
   "keywords": [
     "search",
     "recall",
+    "memory",
     "transcripts",
     "sessions",
     "claude-code",
     "codex",
-    "opencode"
+    "opencode",
+    "cursor"
+  ],
+  "skills": [
+    "./"
   ]
 }

@@ -1,0 +1,32 @@
+name: check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    # Every supported platform against the oldest and newest supported Node lines.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['22.16.0', '22', '24']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm run check
+      # A first run on a machine with no history must answer, not crash.
+      - name: CLI in an empty home
+        shell: bash
+        env:
+          AGENT_RECALL_HOME: ${{ runner.temp }}/recall-data
+          AGENT_RECALL_SOURCE_HOME: ${{ runner.temp }}/home
+        run: |
+          mkdir -p "$AGENT_RECALL_SOURCE_HOME"
+          node scripts/recall.mjs doctor
+          node scripts/recall.mjs search -- anything
