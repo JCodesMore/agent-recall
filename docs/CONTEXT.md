@@ -16,18 +16,22 @@ into their root so one conversation is one result.
 
 **Message**: one normalized entry in a session, numbered by **seq** from 0. Its **kind** is
 `text` (what the user or assistant said), `tool` (a one-line summary of a tool call: the
-command run, the file edited, the prompt given to a subagent) or `summary` (a compaction
-summary the provider wrote).
+command run, the file edited, the prompt given to a subagent), `output` (the head and tail of
+a tool result) or `summary` (a compaction summary the provider wrote).
 
 **Turn**: a user text message and everything after it until the next one.
 
 **Passage**: the searchable unit. A turn split into pieces of at most `PASSAGE_MAX_CHARS`,
-indexed with separate columns for user text, assistant text and tool summaries.
+indexed with separate columns for user text, assistant text and tool calls with their output.
 
 **Hit**: one search result: a root session, its score, and the passages that matched, each
 pointing at a message seq to read from.
 
 **Title**: the best available name for a session, from the richest source that has one: a
-user-set desktop title, a provider-generated title, then the first user prompt.
+user-set title, a provider-generated title, then the first user prompt. Titles from other
+stores (desktop apps, Codex thread names) are **labels**, merged over what the transcript says.
+
+**Recall turn**: a turn in which the agent ran Agent Recall. Its passages are demoted so a chat
+asking for a conversation ranks below the conversation itself.
 
 **Index**: the SQLite database under the data home. Derived state; `sync` rebuilds it.
