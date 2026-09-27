@@ -1,4 +1,5 @@
 import { claudeProvider } from './claude.mjs';
+import { opencodeProvider } from './opencode.mjs';
 
 /**
  * Every provider implements:
@@ -6,9 +7,9 @@ import { claudeProvider } from './claude.mjs';
  *   discover(roots) -> source[]     source = { provider, path, kind: 'jsonl'|'sqlite'|'file', meta }
  *   labels(roots) -> label[]        optional; titles, archive flags and parents kept outside transcripts
  *   parse(source, cursor) -> parsed see builder.mjs for the normalized shape
- *   readAttachment(source, locator) -> { mime, bytes: Buffer } | null
+ *   readAttachment(source, locator) -> { mime, data: Buffer } | null
  */
-export const PROVIDER_LIST = Object.freeze([claudeProvider]);
+export const PROVIDER_LIST = Object.freeze([claudeProvider, opencodeProvider]);
 
 const byId = new Map(PROVIDER_LIST.map(provider => [provider.id, provider]));
 

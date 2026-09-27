@@ -2,7 +2,7 @@ import { LIMITS } from '../shared/config.mjs';
 import { oneLine } from '../shared/text.mjs';
 
 // One searchable line per tool call: what ran, what was touched, what a subagent was asked.
-// Tool output is never indexed; it is large, noisy and already reflected in the reply.
+// Tool output is indexed only as a short head-and-tail excerpt (see outputExcerpt).
 
 function parseMaybeJson(value) {
   if (typeof value !== 'string') return value;
@@ -73,7 +73,7 @@ export function toolSummary(rawName, rawInput) {
     return oneLine(`$ ${commandText(command)}`, max);
   }
   if (key === 'apply_patch') {
-    const files = patchedFiles(object.input ?? object.patch ?? input);
+    const files = patchedFiles(object.input ?? object.patch ?? object.patchText ?? input);
     return oneLine(`edit ${files.join(', ') || '(patch)'}`, max);
   }
   const fileVerb = FILE_VERBS.get(key);
