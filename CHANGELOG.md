@@ -29,6 +29,8 @@ conversation comes first 62% of the time and in the top five 92% (0.6: 24% and 3
   queries that are hard to quote; suggestions for mistyped commands and options.
 - **One skill.** The root `SKILL.md` is the only skill file for every agent and the Claude
   plugin. The installer keeps files you add to the skill folder.
+- Needs Node.js 22.16+ or 24+ (earlier builds lack SQLite full-text search). Tested on
+  Windows, macOS and Linux in CI.
 - Commands `context`, `transcript`, `session` and `status` still work as aliases.
   `search --json` keeps `hits[].score` and adds `completeness.complete`.
 - Removed: the redaction layer (the index holds the same text as the history files it reads)

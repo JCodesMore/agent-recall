@@ -47,12 +47,16 @@ src/shared/          config, paths, ids, text helpers
 ## Tests
 
 - Fixtures are synthetic and built in code with `test/helpers/` (a fake home per test). Never
-  commit real transcript content.
+  commit real transcript content, and invent names: real project names and chat titles from
+  local history are private too (the repository is public).
 - Test through the service and the CLI, not SQL. Expected values are literals.
 - `npm test` runs everything; `node --test test/<file>.test.mjs` runs one file while editing.
 - `npm run eval` is the recall benchmark. A ranking change must not lower it.
 - `npm run check` (tests plus eval plus skill lint) is green before every commit. Report
   failures with their output.
+- CI runs the check on Linux, macOS and Windows with the oldest and newest supported Node.
+  Build paths with `node:path`, spawn `process.execPath` rather than a shell, and treat
+  path case as the platform does (`comparablePath`).
 
 ## Code
 

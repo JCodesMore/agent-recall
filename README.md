@@ -19,7 +19,8 @@ or Cursor, then brings what matters into the work you are doing now.
 
 ## Get started
 
-You need [Node.js](https://nodejs.org/) 22.16 or newer (the "LTS" download is fine).
+Works on Windows, macOS and Linux. You need [Node.js](https://nodejs.org/) 22.16 or newer (the
+"LTS" download is fine; Node 23 lacks the search engine Agent Recall uses).
 
 Paste this to any AI coding agent that can run commands:
 

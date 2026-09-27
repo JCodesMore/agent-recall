@@ -19,6 +19,12 @@ Objective: v1 rewrite of Agent Recall on `rewrite/v1` (see docs/GOAL.md for done
 - Database sources (OpenCode) take a cursor of per-session versions and return partial
   updates. JSONL sources resume from a byte cursor behind a sized head fingerprint.
 - No redaction layer: the source stores already hold the same plaintext.
+- Supported: Node ^22.16 or >=24 (node:sqlite has FTS5 from 22.16; 23 does not; `?1`
+  parameters fail before 22.23). CI (`.github/workflows/check.yml`) runs `npm run check` on
+  Linux, macOS and Windows with Node 22.16.0, 22 and 24. Locally, WSL Ubuntu with nvm runs
+  the same check on Linux.
+- Fixtures use invented names only; names from real history were scrubbed from the whole
+  branch before it was pushed.
 - Never run v1 against the default data home while developing: opening it removes v0's
   `agent-recall.db`. Use a scratch `AGENT_RECALL_HOME`.
 
