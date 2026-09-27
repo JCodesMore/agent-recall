@@ -61,6 +61,7 @@ export function sessionView(row, { detail = false } = {}) {
     messages: row.message_count,
     live: Number.isFinite(row.source_mtime) && Date.now() - row.source_mtime < SYNC.LIVE_WINDOW_MS,
     parentId: row.parent_native_id ?? null,
+    segment: parseJson(row.meta)?.segment ?? null,
     resume: parseJson(row.resume),
   };
   if (detail) Object.assign(view, { model: row.model, firstPrompt: row.first_prompt, titleSource: row.title_source, source: row.source_path, meta: parseJson(row.meta) });
@@ -174,6 +175,15 @@ export async function search(text, options = {}) {
   };
 }
 
+// Codex continues a long thread in segment files; each is indexed as its own session.
+function nextSegment(db, session, children) {
+  const own = parseJson(session.meta)?.segment;
+  if (!own) return children.find(child => child.segment) ?? null;
+  const parent = findSession(db, `${session.provider}:${session.parent_native_id}`).session;
+  const siblings = parent ? childSessions(db, parent).map(row => sessionView(row)).filter(row => row.segment) : [];
+  return siblings[siblings.findIndex(row => row.id === session.native_id) + 1] ?? null;
+}
+
 export async function read(ref, options = {}) {
   const index = await freshen(options);
   return withIndex(db => {
@@ -184,10 +194,12 @@ export async function read(ref, options = {}) {
     }
     const page = readTranscript(db, session, options);
     const root = rootResolver(db).root(session.id);
+    const children = childSessions(db, session).map(row => sessionView(row));
     return {
       session: sessionView(session),
       root: root && root.id !== session.id ? sessionView(root) : null,
-      subagents: childSessions(db, session).map(row => sessionView(row)),
+      subagents: children.filter(child => !child.segment),
+      continuesIn: nextSegment(db, session, children),
       ...page,
       notes: transcriptNotes(db, session, page),
       warnings: index.warnings,

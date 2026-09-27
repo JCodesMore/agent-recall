@@ -74,6 +74,7 @@ export function renderRead(result) {
   const handle = result.session.handle;
   if (result.grepNextFrom !== null && result.grepNextFrom !== undefined) lines.push(`-- more matches: read ${handle} --grep "..." --max-chars <larger>, or read ${handle} --from ${result.grepNextFrom} --`);
   else if (result.nextFrom !== null && result.nextFrom !== undefined) lines.push(`-- more: read ${handle} --from ${result.nextFrom} --`);
+  else if (result.continuesIn) lines.push(`-- continues in the next part: read ${result.continuesIn.handle} --`);
   else if (!result.grepHits) lines.push('-- end of conversation --');
   if (result.prevFrom !== null && result.prevFrom !== undefined) lines.push(`-- earlier: read ${handle} --from ${result.prevFrom} --`);
   if (result.subagents?.length) {

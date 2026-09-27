@@ -1,4 +1,5 @@
 import { claudeProvider } from './claude.mjs';
+import { codexProvider } from './codex.mjs';
 import { cursorProvider } from './cursor.mjs';
 import { opencodeProvider } from './opencode.mjs';
 
@@ -10,7 +11,7 @@ import { opencodeProvider } from './opencode.mjs';
  *   parse(source, cursor) -> parsed see builder.mjs for the normalized shape
  *   readAttachment(source, locator) -> { mime, data: Buffer } | null
  */
-export const PROVIDER_LIST = Object.freeze([claudeProvider, opencodeProvider, cursorProvider]);
+export const PROVIDER_LIST = Object.freeze([claudeProvider, codexProvider, opencodeProvider, cursorProvider]);
 
 const byId = new Map(PROVIDER_LIST.map(provider => [provider.id, provider]));
 
