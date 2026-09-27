@@ -127,11 +127,16 @@ export function rankConversations(db, query, options = {}) {
   for (const row of titled) {
     const group = groupFor(row.sessionId);
     if (!group) continue;
-    group.title = Math.max(group.title, row.score);
+    // Only the conversation's own name counts; subagent descriptions are the agent's words.
+    if (row.sessionId !== group.root.id) continue;
+    group.title = row.score;
     for (const term of sessionTerms.get(row.sessionId) ?? []) group.terms.add(term);
   }
 
+  // A chat that opened by asking for a conversation is titled after what it looked for.
+  const openingFlags = db.prepare('SELECT flags FROM passages WHERE session_id = ? AND first_seq = 0');
   const scored = [...groups.values()].map(group => {
+    if (group.title && (openingFlags.get(group.root.id)?.flags ?? 0) & PASSAGE_FLAGS.RECALL) group.title *= RANKING.RECALL_PENALTY;
     group.passages.sort((a, b) => b.weight - a.weight);
     const [first = 0, ...rest] = group.passages.map(p => p.weight);
     const extra = RANKING.EXTRA_PASSAGE_WEIGHTS.reduce((sum, weight, i) => sum + weight * (rest[i] ?? 0), 0);

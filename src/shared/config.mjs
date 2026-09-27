@@ -72,11 +72,11 @@ export const LIMITS = Object.freeze({
 
 export const RANKING = Object.freeze({
   // bm25 column weights for passages_fts(user, assistant, tools) and sessions_fts(title, context)
-  PASSAGE_WEIGHTS: [1.6, 1.0, 0.6],
+  PASSAGE_WEIGHTS: [1.6, 0.6, 0.6],
   SESSION_WEIGHTS: [2.5, 0.8],
   // Weight of a session's 2nd and 3rd best passages relative to its best one.
-  EXTRA_PASSAGE_WEIGHTS: [0.35, 0.15],
-  TITLE_WEIGHT: 1.2,
+  EXTRA_PASSAGE_WEIGHTS: [0.6, 0.4, 0.25],
+  TITLE_WEIGHT: 0.6,
   // Added to every conversation's text score so the multiplicative boosts below still order
   // results when bm25 gives near zero (a term present in most of a small index).
   BASE_SCORE: 0.5,

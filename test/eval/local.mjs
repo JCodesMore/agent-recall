@@ -26,7 +26,8 @@ function v0Rank(item) {
   if (!process.env.AGENT_RECALL_V0) return undefined;
   try {
     const out = execFileSync(process.execPath, [process.env.AGENT_RECALL_V0, 'search', '--json', '--no-sync', '--limit', '50', '--', item.query], { encoding: 'utf8', env: { ...process.env, AGENT_RECALL_HOME: '' } });
-    const ids = [...new Set(JSON.parse(out).hits.map(hit => hit.session.nativeId))];
+    const asker = item.source?.split(':')[1];
+    const ids = [...new Set(JSON.parse(out).hits.map(hit => hit.session.nativeId))].filter(id => id !== asker);
     return rankOf(ids, item.expect);
   } catch {
     return null;
@@ -38,7 +39,10 @@ const totals = { v1: { hit1: 0, hit5: 0 }, v0: { hit1: 0, hit5: 0 } };
 const misses = [];
 for (const item of cases) {
   const started = performance.now();
-  const result = await recall.search(item.query, { cwd: item.cwd, limit: 10, sync: 'never' });
+  // The chat the question was asked in was the running one then, so it is excluded, as it
+  // would have been live.
+  const asker = item.source?.split(':')[1];
+  const result = await recall.search(item.query, { cwd: item.cwd, limit: 10, sync: 'never', exclude: asker ? [asker] : [] });
   const ms = performance.now() - started;
   const rank = rankOf(result.hits.map(hit => hit.id), item.expect);
   const old = v0Rank(item);
