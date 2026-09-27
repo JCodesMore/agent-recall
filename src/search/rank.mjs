@@ -87,7 +87,8 @@ function bestMessage(db, passage, stems) {
 export function rankConversations(db, query, options = {}) {
   const limit = Math.min(Math.max(1, options.limit ?? LIMITS.SEARCH_DEFAULT), LIMITS.SEARCH_MAX);
   if (!query.terms.length) return { hits: [], considered: 0 };
-  const filter = sessionFilter(options);
+  // Archiving applies to a whole conversation, so it is checked on the root below.
+  const filter = sessionFilter({ ...options, archived: 'include' });
   const now = options.now ?? Date.now();
   const resolve = rootResolver(db);
 
@@ -115,6 +116,8 @@ export function rankConversations(db, query, options = {}) {
   const groupFor = sessionId => {
     const root = resolve.root(sessionId);
     if (!root || options.exclude?.has(root.native_id)) return null;
+    if (options.archived === 'exclude' && root.archived) return null;
+    if (options.archived === 'only' && !root.archived) return null;
     if (!groups.has(root.id)) groups.set(root.id, { root, passages: [], title: 0, terms: new Set() });
     return groups.get(root.id);
   };

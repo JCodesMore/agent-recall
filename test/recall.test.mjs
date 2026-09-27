@@ -164,3 +164,18 @@ test('a session copied to a second folder follows the newest copy and survives d
   await recall.sync();
   assert.deepEqual(handles(await recall.search('ocelot', { sync: 'never' })), []);
 });
+
+test('read handles out-of-range pages and shows output matches', async t => {
+  const home = withHome(t);
+  home.jsonl(project('-w', 'edge-1'), [
+    claude.user('start the server', 1),
+    claude.assistant([claude.toolUse('s1', 'Bash', { command: 'npm start' })], 2),
+    claude.toolResult('s1', 'Error: listen EADDRINUSE :::3000', 3),
+  ]);
+  const { hits: [hit] } = await recall.search('EADDRINUSE');
+  const page = await recall.read('edge-1', { at: hit.matches[0].seq });
+  assert.ok(page.messages.some(m => m.text.includes('EADDRINUSE')));
+  assert.equal((await recall.read('edge-1', { grep: 'EADDRINUSE' })).grepHits.length, 1);
+  assert.equal((await recall.read('edge-1', { from: 999 })).messages.length, 0);
+  assert.equal((await recall.read('edge-1', { last: 0 })).messages.length, 0);
+});

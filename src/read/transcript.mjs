@@ -18,6 +18,10 @@ function loadMessages(db, sessionId, { outputs, tools }) {
     .map(row => ({ ...row, meta: parseMeta(row.meta) }));
 }
 
+function isOutput(db, sessionId, seq) {
+  return db.prepare('SELECT kind FROM messages WHERE session_id = ? AND seq = ?').get(sessionId, seq)?.kind === KINDS.OUTPUT;
+}
+
 function grepMatcher(pattern) {
   const needle = pattern.toLowerCase();
   const stems = new Set(words(pattern).map(stem));
@@ -69,7 +73,8 @@ function startIndex(messages, { at, from, last }) {
  */
 export function readTranscript(db, session, options = {}) {
   const tools = options.tools ?? true;
-  const outputs = options.outputs ?? false;
+  // A search can point at a tool output, and --grep should find text wherever it is.
+  const outputs = options.outputs ?? (Boolean(options.grep) || (Number.isInteger(options.at) && isOutput(db, session.id, options.at)));
   const messages = loadMessages(db, session.id, { tools, outputs });
   const total = db.prepare('SELECT count(*) AS n FROM messages WHERE session_id = ?').get(session.id).n;
   const budget = options.all ? Infinity : Math.min(Math.max(1_000, options.maxChars ?? LIMITS.READ_BUDGET_CHARS), LIMITS.READ_MAX_BUDGET_CHARS);
@@ -94,7 +99,7 @@ export function readTranscript(db, session, options = {}) {
     total,
     firstIndex: start,
     nextFrom: end < messages.length ? messages[end].seq : null,
-    prevFrom: start > 0 ? messages[Math.max(0, start - page.length)].seq : null,
+    prevFrom: start > 0 && messages.length ? messages[Math.max(0, Math.min(start, messages.length) - Math.max(page.length, 1))].seq : null,
   };
 }
 

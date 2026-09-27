@@ -96,11 +96,11 @@ export const SYNC = Object.freeze({
   // nothing new costs a few hundred milliseconds, so keep this short: agents look for things
   // said minutes ago in another chat.
   STALE_AFTER_MS: 10 * 1_000,
-  LOCK_STALE_MS: 10 * 60 * 1_000,
   // How long a search or read may spend catching the index up before answering from it and
   // leaving the rest to a background sync.
   FOREGROUND_BUDGET_MS: 4_000,
   LOCK_WAIT_MS: 60 * 1_000,
+  LOCK_POLL_MS: 250,
   PROGRESS_INTERVAL_MS: 2_000,
   BUSY_TIMEOUT_MS: 10_000,
   // Sources written this recently are labelled live in results.

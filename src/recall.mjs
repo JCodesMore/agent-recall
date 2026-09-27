@@ -15,7 +15,6 @@ import { providerById, PROVIDER_LIST } from './providers/registry.mjs';
 import { claudeRetentionDays } from './providers/claude.mjs';
 
 const CLI = fileURLToPath(new URL('../scripts/recall.mjs', import.meta.url));
-const POLL_MS = 250;
 
 export class RecallError extends Error {
   constructor(message, { code = 'error', hint = null, candidates = null } = {}) {
@@ -87,23 +86,29 @@ async function freshen({ sync = 'auto', onProgress } = {}) {
       db.close();
     }
   };
-  let before = status();
+  const before = status();
   if (sync === 'never') {
     if (!before.lastSync) warnings.push('The index has never been built. Run: sync');
     return { ...before, pending: 0, warnings };
   }
   const first = !before.lastSync;
-  const fresh = before.lastSync && Date.now() - Date.parse(before.lastSync) < SYNC.STALE_AFTER_MS;
-  if (fresh && sync !== 'wait') return { ...before, pending: 0, warnings };
+  if (!first && Date.now() - Date.parse(before.lastSync) < SYNC.STALE_AFTER_MS) return { ...before, pending: 0, warnings };
 
-  const budgetMs = first || sync === 'wait' ? Infinity : SYNC.FOREGROUND_BUDGET_MS;
-  let result = await syncIndex({ budgetMs, onProgress });
-  const waitUntil = Date.now() + SYNC.LOCK_WAIT_MS;
-  while (result.locked && (first || sync === 'wait') && Date.now() < waitUntil) {
-    await sleep(POLL_MS);
-    before = status();
-    if (before.lastSync && !first) break;
+  const budgetMs = first ? Infinity : SYNC.FOREGROUND_BUDGET_MS;
+  let result;
+  try {
     result = await syncIndex({ budgetMs, onProgress });
+    // Another process is building the first index: wait for it rather than answer from half.
+    const waitUntil = Date.now() + SYNC.LOCK_WAIT_MS;
+    while (result.locked && first && Date.now() < waitUntil && !status().lastSync) {
+      await sleep(SYNC.LOCK_POLL_MS);
+      result = await syncIndex({ budgetMs, onProgress });
+    }
+  } catch (error) {
+    // An index that exists still answers; the failed update is reported, not fatal.
+    if (first) throw error;
+    warnings.push(`The index could not be updated (${error.message}); results may miss the newest messages.`);
+    return { ...before, pending: 0, warnings };
   }
   if (result.locked && !status().lastSync) warnings.push('Another process is building the index; results may be incomplete.');
   if (result.pending) {

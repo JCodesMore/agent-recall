@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { SYNC } from '../shared/config.mjs';
@@ -20,25 +21,36 @@ function processAlive(pid) {
   }
 }
 
-// Cross-process lock so concurrent agents never index the same files twice.
+// An unreadable lock may be one another process is still writing.
+function justCreated(file) {
+  const stat = fs.statSync(file, { throwIfNoEntry: false });
+  return Boolean(stat) && Date.now() - stat.mtimeMs < SYNC.LOCK_POLL_MS * 20;
+}
+
+function readLock(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+// Cross-process lock so concurrent agents never index the same files twice. A lock is only
+// taken over when its process is gone (a first full index can legitimately run for minutes),
+// and releasing removes the file only while it is still ours.
 export function acquireLock() {
   const file = lockPath();
+  const token = randomUUID();
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const fd = fs.openSync(file, 'wx');
-      fs.writeSync(fd, JSON.stringify({ pid: process.pid, at: Date.now() }));
-      fs.closeSync(fd);
-      return () => fs.rmSync(file, { force: true });
+      fs.writeFileSync(file, JSON.stringify({ pid: process.pid, at: Date.now(), token }), { flag: 'wx' });
+      return () => {
+        if (readLock(file)?.token === token) fs.rmSync(file, { force: true });
+      };
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;
-      let holder = null;
-      try {
-        holder = JSON.parse(fs.readFileSync(file, 'utf8'));
-      } catch {
-        // unreadable lock: treat as stale
-      }
-      const stale = !holder || Date.now() - holder.at > SYNC.LOCK_STALE_MS || !processAlive(holder.pid);
-      if (!stale) return null;
+      const holder = readLock(file);
+      if (holder ? processAlive(holder.pid) : justCreated(file)) return null;
       fs.rmSync(file, { force: true });
     }
   }
@@ -85,10 +97,11 @@ function parseCursor(value) {
 export async function syncIndex({ providers, full = false, budgetMs = Infinity, onProgress, db: givenDb } = {}) {
   const release = acquireLock();
   if (!release) return { ok: true, locked: true, pending: null };
-  const db = givenDb ?? openIndex();
   const started = Date.now();
   const stats = { ok: true, locked: false, indexed: 0, appended: 0, skipped: 0, removed: 0, pending: 0, errors: [], providers: {} };
+  let db = givenDb;
   try {
+    db ??= openIndex();
     const roots = sourceRoots();
     const writer = createWriter(db);
     const loadKnown = () => new Map(db.prepare('SELECT id, path, provider, size, mtime, extra, head, cursor FROM sources').all().map(row => [row.path, row]));
@@ -191,7 +204,7 @@ export async function syncIndex({ providers, full = false, budgetMs = Infinity, 
     stats.elapsedMs = Date.now() - started;
     return stats;
   } finally {
-    if (!givenDb) db.close();
+    if (!givenDb) db?.close();
     release();
   }
 }

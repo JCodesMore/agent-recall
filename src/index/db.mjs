@@ -125,6 +125,15 @@ function removeFiles(file) {
   for (const candidate of [file, `${file}-wal`, `${file}-shm`]) fs.rmSync(candidate, { force: true });
 }
 
+// Old index files only cost disk space; another process may still hold them open.
+function removeQuietly(file) {
+  try {
+    fs.rmSync(file, { force: true });
+  } catch {
+    // retried on the next open
+  }
+}
+
 function configure(db) {
   db.exec(`PRAGMA busy_timeout=${SYNC.BUSY_TIMEOUT_MS}; PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA temp_store=MEMORY;`);
 }
@@ -146,7 +155,7 @@ export function openIndex({ file = databasePath(), readonly = false } = {}) {
   }
   ensureDataHome();
   // v0 indexes lived in a different file; they are derived data and only cost disk space.
-  for (const legacy of APP.LEGACY_DB_FILES) fs.rmSync(path.join(dataHome(), legacy), { force: true });
+  for (const legacy of APP.LEGACY_DB_FILES) removeQuietly(path.join(dataHome(), legacy));
   let db = new DatabaseSync(file);
   configure(db);
   const version = metaValue(db, 'index_version');
