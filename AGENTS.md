@@ -22,7 +22,7 @@ src/read/            transcript paging and export
 src/index/           SQLite schema, sync writer, lock
 src/providers/       one module per provider; all format knowledge lives here
 src/install/         installer
-src/shared/          config, paths, ids, text helpers, redaction
+src/shared/          config, paths, ids, text helpers
 ```
 
 - Dependency direction: `cli -> recall -> search|read|index -> providers -> shared`.
@@ -46,8 +46,8 @@ src/shared/          config, paths, ids, text helpers, redaction
 
 ## Tests
 
-- Fixtures are synthetic and built in code under `test/fixtures/`. Never commit real transcript
-  content.
+- Fixtures are synthetic and built in code with `test/helpers/` (a fake home per test). Never
+  commit real transcript content.
 - Test through the service and the CLI, not SQL. Expected values are literals.
 - `npm test` runs everything; `node --test test/<file>.test.mjs` runs one file while editing.
 - `npm run eval` is the recall benchmark. A ranking change must not lower it.

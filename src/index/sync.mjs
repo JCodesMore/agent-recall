@@ -56,8 +56,16 @@ async function statSource(source) {
   return { size: stat.size, mtime: Math.trunc(stat.mtimeMs), extra };
 }
 
-async function headHash(file) {
-  return hashHex((await readHead(file, SYNC.HEAD_BYTES)).toString('latin1')).slice(0, 24);
+// Fingerprint of a file's first bytes, stored as "<bytes>:<hash>" so a file that has grown
+// past the old length is compared over the same prefix it was indexed with.
+async function headHash(file, bytes) {
+  const head = await readHead(file, bytes);
+  return `${head.length}:${hashHex(head.toString('latin1')).slice(0, 24)}`;
+}
+
+async function sameHead(file, stored) {
+  const bytes = Number.parseInt(stored ?? '', 10);
+  return Number.isInteger(bytes) && (await headHash(file, bytes)) === stored;
 }
 
 function parseCursor(value) {
@@ -142,10 +150,10 @@ export async function syncIndex({ providers, full = false, budgetMs = Infinity, 
       }
       const item = work[index];
       try {
-        if (item.source.kind === 'jsonl') item.stat.head = await headHash(item.source.path);
         const cursor = parseCursor(item.row?.cursor);
-        item.append = !full && item.source.kind === 'jsonl' && Boolean(cursor?.state) && item.row.head === item.stat.head
-          && item.stat.size >= item.row.size && cursor.offset <= item.stat.size;
+        item.append = !full && item.source.kind === 'jsonl' && Boolean(cursor?.state) && item.stat.size >= item.row.size
+          && cursor.offset <= item.stat.size && await sameHead(item.source.path, item.row.head);
+        if (item.source.kind === 'jsonl') item.stat.head = await headHash(item.source.path, Math.min(SYNC.HEAD_BYTES, item.stat.size));
         item.parsed = await item.provider.parse(item.source, item.append ? cursor : null);
         batch.push(item);
         batchBytes += item.stat.size - (item.append ? item.row.size : 0);

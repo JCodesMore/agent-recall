@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   title_source TEXT,
   first_prompt TEXT,
   cwd TEXT,
+  -- cwd in comparable form (forward slashes, case folded where the OS folds case).
+  cwd_key TEXT,
   project TEXT,
   git_branch TEXT,
   model TEXT,

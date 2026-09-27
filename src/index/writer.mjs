@@ -1,6 +1,6 @@
 import { PROVIDER_LABELS } from '../shared/config.mjs';
 import { HANDLE_LENGTH, sessionHandle } from '../shared/ids.mjs';
-import { projectName } from '../shared/paths.mjs';
+import { comparablePath, projectName } from '../shared/paths.mjs';
 import { PASSAGE_FLAGS, buildPassages } from './passages.mjs';
 
 const TITLE_RANK = { user: 3, generated: 2, prompt: 1 };
@@ -33,6 +33,7 @@ export function effectiveSession(parsed, label) {
     kind: parentNativeId ? 'subagent' : 'main',
     archived: label?.archived === null || label?.archived === undefined ? Boolean(parsed.archived) : Boolean(label.archived),
     cwd,
+    cwdKey: cwd ? comparablePath(cwd) : null,
     origin,
     project: cwd ? projectName(cwd) : origin === 'cowork' ? 'cowork' : null,
     meta: { ...(parsed.meta ?? {}), ...parseJson(label?.meta, {}) },
@@ -47,11 +48,11 @@ export function createWriter(db) {
     deleteSource: db.prepare('DELETE FROM sources WHERE path = ?'),
     findHandle: db.prepare('SELECT provider, native_id FROM sessions WHERE handle = ?'),
     upsertSession: db.prepare(`INSERT INTO sessions(handle, provider, native_id, source_id, parent_native_id, kind, title, title_source,
-        first_prompt, cwd, project, git_branch, model, origin, created_at, updated_at, archived, resume, meta, parsed)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        first_prompt, cwd, cwd_key, project, git_branch, model, origin, created_at, updated_at, archived, resume, meta, parsed)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(provider, native_id) DO UPDATE SET
         parent_native_id = excluded.parent_native_id, kind = excluded.kind, title = excluded.title,
-        title_source = excluded.title_source, first_prompt = excluded.first_prompt, cwd = excluded.cwd,
+        title_source = excluded.title_source, first_prompt = excluded.first_prompt, cwd = excluded.cwd, cwd_key = excluded.cwd_key,
         project = excluded.project, git_branch = excluded.git_branch, model = excluded.model, origin = excluded.origin,
         created_at = excluded.created_at, updated_at = excluded.updated_at, archived = excluded.archived,
         resume = excluded.resume, meta = excluded.meta, parsed = excluded.parsed
@@ -71,7 +72,7 @@ export function createWriter(db) {
     insertPassageDoc: db.prepare('INSERT INTO passages_fts(rowid, user, assistant, tools) VALUES (?, ?, ?, ?)'),
     sessionsForLabel: db.prepare('SELECT id, parsed, git_branch FROM sessions WHERE provider = ? AND native_id = ?'),
     updateEffective: db.prepare(`UPDATE sessions SET parent_native_id = ?, kind = ?, title = ?, title_source = ?, archived = ?,
-      cwd = ?, project = ?, origin = ?, meta = ? WHERE id = ?`),
+      cwd = ?, cwd_key = ?, project = ?, origin = ?, meta = ? WHERE id = ?`),
     currentLabels: db.prepare('SELECT * FROM labels WHERE provider = ?'),
     upsertLabel: db.prepare(`INSERT OR REPLACE INTO labels(provider, native_id, title, title_source, archived, parent_native_id, origin, cwd, meta)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
@@ -99,7 +100,7 @@ export function createWriter(db) {
     const effective = effectiveSession(session, label);
     const row = q.upsertSession.get(
       handleFor(provider, session.nativeId), provider, session.nativeId, sourceId, effective.parentNativeId, effective.kind,
-      effective.title, effective.titleSource, session.firstPrompt ?? null, effective.cwd, effective.project,
+      effective.title, effective.titleSource, session.firstPrompt ?? null, effective.cwd, effective.cwdKey, effective.project,
       session.gitBranch ?? null, session.model ?? null, effective.origin, session.createdAt ?? null, session.updatedAt ?? null,
       effective.archived ? 1 : 0, json(session.resume), json(effective.meta), JSON.stringify(session),
     );
@@ -190,7 +191,7 @@ export function createWriter(db) {
         if (!session) continue;
         const effective = effectiveSession(parseJson(session.parsed, {}), q.label.get(provider, nativeId));
         q.updateEffective.run(effective.parentNativeId, effective.kind, effective.title, effective.titleSource, effective.archived ? 1 : 0,
-          effective.cwd, effective.project, effective.origin, json(effective.meta), session.id);
+          effective.cwd, effective.cwdKey, effective.project, effective.origin, json(effective.meta), session.id);
         writeSessionDoc(session.id, provider, effective, session.git_branch);
       }
       return touched.size;

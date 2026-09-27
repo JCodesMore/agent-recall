@@ -1,5 +1,10 @@
 // Every limit, default and version lives here. Import from this module; never repeat a value.
 
+import fs from 'node:fs';
+
+// package.json is the single source of the release version; manifests are checked against it.
+export const VERSION = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
+
 export const APP = Object.freeze({
   NAME: 'agent-recall',
   // JSON output contract. Bump only when a field is removed or changes meaning.
@@ -54,6 +59,7 @@ export const LIMITS = Object.freeze({
   SEARCH_DEFAULT: 6,
   SEARCH_MAX: 50,
   SEARCH_CANDIDATES: 600,
+  SESSION_CANDIDATES: 150,
   MATCHES_PER_HIT: 2,
   SNIPPET_CHARS: 260,
   // Reading
@@ -71,18 +77,27 @@ export const RANKING = Object.freeze({
   // Weight of a session's 2nd and 3rd best passages relative to its best one.
   EXTRA_PASSAGE_WEIGHTS: [0.35, 0.15],
   TITLE_WEIGHT: 1.2,
+  // Added to every conversation's text score so the multiplicative boosts below still order
+  // results when bm25 gives near zero (a term present in most of a small index).
+  BASE_SCORE: 0.5,
   // Fraction of query terms a session covers, squared, times this, times the best score.
   COVERAGE_WEIGHT: 0.6,
   CURRENT_PROJECT_BOOST: 1.25,
   RECENCY_BOOST: 0.15,
   RECENCY_HALF_LIFE_DAYS: 30,
   SUMMARY_PENALTY: 0.5,
+  // Turns that ran a recall lookup are usually the request for a conversation, not the
+  // conversation itself.
+  RECALL_PENALTY: 0.3,
 });
 
 export const SYNC = Object.freeze({
   // A hook-triggered sync is skipped when the last one is younger than this.
   STALE_AFTER_MS: 2 * 60 * 1_000,
   LOCK_STALE_MS: 10 * 60 * 1_000,
+  // How long a search or read may spend catching the index up before answering from it and
+  // leaving the rest to a background sync.
+  FOREGROUND_BUDGET_MS: 4_000,
   LOCK_WAIT_MS: 60 * 1_000,
   PROGRESS_INTERVAL_MS: 2_000,
   BUSY_TIMEOUT_MS: 10_000,
