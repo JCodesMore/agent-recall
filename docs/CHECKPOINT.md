@@ -16,15 +16,19 @@ Objective: v1 rewrite of Agent Recall on `rewrite/v1` (see docs/GOAL.md for done
 
 ## Done
 
-- Foundation: shared config/paths/ids/text, JSONL scanner, builder, Claude provider, index
-  schema, writer, incremental sync with lock (commit 33ea4f9).
+- Foundation, Claude/OpenCode/Cursor providers, index + incremental sync, search, read,
+  service (src/recall.mjs), CLI, root SKILL.md + lint, installer, README, CHANGELOG,
+  synthetic benchmark (hit@1 1.00), local eval runner. Real machine without Codex: full index
+  28 s, no-op sync 0.3 s, search 0.2 s.
 
 ## Active
 
-- Codex, OpenCode, Cursor providers (delegated; lead wires them into registry.mjs).
-- Search (src/search), read (src/read), service (src/recall.mjs), CLI (src/cli).
+- Codex provider (delegated). Wire into registry.mjs, fill docs/providers.md Codex section.
+- Private local eval set being built at %LOCALAPPDATA%/agent-recall/local-eval.json.
+- Reviewer pass on the core (delegated).
 
 ## Next
 
-- Root SKILL.md, references/, agents/openai.yaml, plugin manifests, hooks, installer.
-- Eval benchmark (synthetic) and private local eval; README; CHANGELOG; delete v0 modules.
+- Run eval:local with Codex indexed; tune ranking; compare with v0 (AGENT_RECALL_V0).
+- Codex current-session exclusion (env var if one exists; else live + recall-turn heuristic).
+- Final: npm run check, real-machine timing with Codex, update CHECKPOINT, summary.
