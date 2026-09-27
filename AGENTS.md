@@ -21,11 +21,13 @@ src/search/          query parsing, ranking, snippets
 src/read/            transcript paging and export
 src/index/           SQLite schema, sync writer, lock
 src/providers/       one module per provider; all format knowledge lives here
+src/peers/           other computers over SSH: peers.json, remote calls, merging
 src/install/         installer
 src/shared/          config, paths, ids, text helpers
 ```
 
-- Dependency direction: `cli -> recall -> search|read|index -> providers -> shared`.
+- Dependency direction: `cli -> recall|peers`, `recall -> search|read|index -> providers -> shared`,
+  `peers -> shared`.
   Providers never import from `index`, `search` or `cli`.
 - A provider turns its store into normalized sessions, turns and messages. Nothing outside
   `src/providers/` knows a provider's file format.

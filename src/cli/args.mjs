@@ -7,12 +7,12 @@ const FILTERS = { provider: 'list', project: 'value', since: 'value', until: 'va
 
 // Flags each command accepts: bool, value, int or list (repeatable or comma separated).
 export const COMMANDS = {
-  search: { ...COMMON, ...FILTERS, cwd: 'value', stdin: 'bool', 'include-current': 'bool' },
-  read: { ...COMMON, at: 'int', from: 'int', last: 'int', grep: 'value', 'max-chars': 'int', outputs: 'bool', 'no-tools': 'bool', all: 'bool', out: 'value', context: 'int' },
-  show: { ...COMMON },
-  recent: { ...COMMON, ...FILTERS, 'include-current': 'bool' },
+  search: { ...COMMON, ...FILTERS, cwd: 'value', stdin: 'bool', 'include-current': 'bool', peers: 'list' },
+  read: { ...COMMON, at: 'int', from: 'int', last: 'int', grep: 'value', 'max-chars': 'int', outputs: 'bool', 'no-tools': 'bool', all: 'bool', out: 'value', context: 'int', peer: 'value' },
+  show: { ...COMMON, peer: 'value' },
+  recent: { ...COMMON, ...FILTERS, 'include-current': 'bool', peers: 'list' },
   sync: { ...COMMON, provider: 'list', full: 'bool', quiet: 'bool' },
-  doctor: { ...COMMON },
+  doctor: { ...COMMON, peers: 'list' },
   attachment: { ...COMMON, out: 'value' },
   install: { ...COMMON, target: 'list', 'dry-run': 'bool', uninstall: 'bool', 'agents-only': 'bool' },
   help: { ...COMMON },
@@ -49,6 +49,21 @@ function toInt(flag, value) {
   const number = Number(value);
   if (!Number.isInteger(number) || number < 0) throw new UsageError(`--${flag} needs a whole number, got "${value}".`);
   return number;
+}
+
+// Flags that only make sense on this computer are not passed on to another one.
+const LOCAL_ONLY_FLAGS = new Set(['json', 'peers', 'peer', 'stdin', 'out', 'help']);
+
+/** Rebuilds a command line from parsed flags, for running the same command on another computer. */
+export function toArgv(command, flags, positional) {
+  const spec = COMMANDS[command];
+  const argv = [command];
+  for (const [name, value] of Object.entries(flags)) {
+    if (LOCAL_ONLY_FLAGS.has(name) || value === undefined || value === false) continue;
+    if (spec[name] === 'bool') argv.push(`--${name}`);
+    else argv.push(`--${name}`, spec[name] === 'list' ? value.join(',') : String(value));
+  }
+  return [...argv, '--', ...positional];
 }
 
 /**

@@ -3,7 +3,7 @@ name: agent-recall
 description: Search and read the user's past conversations with Claude Code, Codex, OpenCode and Cursor. Use when the user mentions earlier work or another chat ("we discussed", "last time", "that session", "remember when"), when an answer may already exist in a previous conversation, before asking the user to repeat context, or to catch up on recent work in a project.
 argument-hint: <what to find>
 license: Apache-2.0
-compatibility: Needs Node.js 22.16 or newer. Reads local history only; nothing leaves the machine.
+compatibility: Needs Node.js 22.16 or newer. Reads local history, plus the user's other computers over SSH when they set that up.
 allowed-tools: Bash(node:*) Read
 ---
 
@@ -67,6 +67,14 @@ was not found, rather than guessing.
 
 Handles, native session ids, unique prefixes, `codex:<id>` and `codex://threads/<id>` all work
 wherever a handle is expected.
+
+## Other computers
+
+When the user has more than one computer set up (`doctor` lists them), a conversation may
+live on another one. Add `--peers all` to `search` or `recent` when the user mentions another
+computer or a local search finds nothing. Remote results show `@name`, and their `read`
+commands carry `--peer name`; use them as shown. A `computers:` line reports any computer
+that could not be reached; say so when it matters. Setup: [references/peers.md](references/peers.md).
 
 ## Shell quoting
 

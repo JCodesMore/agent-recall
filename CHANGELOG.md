@@ -27,6 +27,8 @@ conversation comes first 62% of the time and in the top five 92% (0.6: 24% and 3
 - **Easier.** Short handles (`abc1234`) plus native ids, prefixes, `codex:<id>` and
   `codex://threads/<id>`; compact text output with the next command to run; `--stdin` for
   queries that are hard to quote; suggestions for mistyped commands and options.
+- **Other computers.** With a `peers.json`, `search --peers all` and `recent --peers all`
+  also ask your other computers over SSH, and `read --peer NAME` opens what they found.
 - **One skill.** The root `SKILL.md` is the only skill file for every agent and the Claude
   plugin. The installer keeps files you add to the skill folder.
 - Needs Node.js 22.16+ or 24+ (earlier builds lack SQLite full-text search). Tested on

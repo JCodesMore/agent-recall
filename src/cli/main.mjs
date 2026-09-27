@@ -1,6 +1,6 @@
 import fs from 'node:fs';
-import { APP, EXIT, VERSION } from '../shared/config.mjs';
-import { COMMAND_ALIASES, COMMANDS, UsageError, closest, parseArgs, parseWhen } from './args.mjs';
+import { APP, EXIT, LIMITS, PEERS, VERSION } from '../shared/config.mjs';
+import { COMMAND_ALIASES, COMMANDS, UsageError, closest, parseArgs, parseWhen, toArgv } from './args.mjs';
 import { renderAttachment, renderDoctor, renderError, renderRead, renderRecent, renderSearch, renderShow, renderSync } from './render.mjs';
 
 const HELP = `Agent Recall ${VERSION}: search and read past Claude Code, Codex, OpenCode and Cursor conversations.
@@ -31,6 +31,10 @@ Usage: recall.mjs <command> [options]
   sync [--full] [--provider P]  Update the index now (searches do this automatically).
   doctor                        Check setup, index and per-provider counts.
   attachment <id> [--out FILE]  Save an image or file attached to a message.
+
+Other computers (set up in peers.json; see references/peers.md):
+      --peers all|NAMES         search, recent: also ask other computers; doctor: check them
+      --peer NAME               read, show: open a conversation found on another computer
   install [--target DIR]        Install or update the skill for your agents.
 
 Handles are the 7-character ids in results. Native ids, unique prefixes, provider:id and
@@ -65,6 +69,39 @@ function filterOptions(flags) {
   };
 }
 
+// Peer configuration mistakes are usage errors: the fix is in peers.json or the command line.
+async function peersFor(names) {
+  const { PeerError, selectPeers } = await import('../peers/peers.mjs');
+  try {
+    return selectPeers(names);
+  } catch (error) {
+    throw error instanceof PeerError ? new UsageError(error.message) : error;
+  }
+}
+
+async function onePeer(name, argv) {
+  const [peer] = await peersFor([name]);
+  if (!peer) throw new UsageError(`"${name}" is this computer; leave out --peer.`);
+  const { onPeer } = await import('../peers/federate.mjs');
+  return onPeer(peer, argv);
+}
+
+// Another computer's Agent Recall calls this over SSH: {"argv": [...]} on stdin, JSON out.
+async function answerPeer() {
+  let argv;
+  try {
+    ({ argv } = JSON.parse(readStdin()));
+  } catch {
+    throw new UsageError('peer-request expects {"argv": [...]} on standard input.');
+  }
+  const command = COMMAND_ALIASES[argv?.[0]] ?? argv?.[0];
+  if (!Array.isArray(argv) || !PEERS.COMMANDS.includes(command)) throw new UsageError(`peer-request answers only: ${PEERS.COMMANDS.join(', ')}.`);
+  const end = argv.indexOf('--');
+  const options = end === -1 ? argv : argv.slice(0, end);
+  if (options.some(arg => /^--peers?(=|$)/.test(String(arg)))) throw new UsageError('peer-request does not forward to further computers.');
+  return main([command, '--json', ...argv.slice(1).map(String)]);
+}
+
 async function run(command, flags, positional, json) {
   const recall = await import('../recall.mjs');
   const onProgress = progressReporter(!json && !flags.quiet);
@@ -76,23 +113,39 @@ async function run(command, flags, positional, json) {
     case 'search': {
       const text = flags.stdin ? readStdin() : positional.join(' ');
       if (!text.trim()) throw new UsageError('search needs words. Example: search -- stripe webhook retries');
-      const result = await recall.search(text, { ...filterOptions(flags), cwd: flags.cwd ?? process.cwd(), onProgress });
+      const cwd = flags.cwd ?? process.cwd();
+      const result = await recall.search(text, { ...filterOptions(flags), cwd, onProgress });
       result.completeness = { complete: result.index.pending === 0 && result.warnings.length === 0, pending: result.index.pending };
-      return [result, renderSearch];
+      if (!flags.peers) return [result, renderSearch];
+      const { searchAcross } = await import('../peers/federate.mjs');
+      return [await searchAcross(result, await peersFor(flags.peers), toArgv('search', { ...flags, cwd }, [text])), renderSearch];
     }
     case 'read':
+      if (flags.peer) {
+        if (flags.out) throw new UsageError('--out writes on this computer; run it on the computer that has the conversation.');
+        return [await onePeer(flags.peer, toArgv('read', flags, [one('handle')])), renderRead];
+      }
       return [await recall.read(one('handle'), {
         at: flags.at, from: flags.from, last: flags.last, grep: flags.grep, maxChars: flags['max-chars'], context: flags.context,
         outputs: flags.outputs, tools: !flags['no-tools'], all: flags.all, out: flags.out, sync: flags['no-sync'] ? 'never' : 'auto', onProgress,
       }), renderRead];
     case 'show':
+      if (flags.peer) return [await onePeer(flags.peer, toArgv('show', flags, [one('handle')])), renderShow];
       return [await recall.show(one('handle'), { sync: flags['no-sync'] ? 'never' : 'auto', onProgress }), renderShow];
-    case 'recent':
-      return [await recall.recent({ ...filterOptions(flags), onProgress }), renderRecent];
+    case 'recent': {
+      const result = await recall.recent({ ...filterOptions(flags), onProgress });
+      if (!flags.peers) return [result, renderRecent];
+      const { recentAcross } = await import('../peers/federate.mjs');
+      return [await recentAcross(result, await peersFor(flags.peers), toArgv('recent', flags, []), flags.limit ?? LIMITS.RECENT_DEFAULT), renderRecent];
+    }
     case 'sync':
       return [await recall.sync({ full: flags.full, providers: flags.provider, onProgress }), renderSync];
-    case 'doctor':
-      return [await recall.doctor(), renderDoctor];
+    case 'doctor': {
+      const result = await recall.doctor();
+      if (!flags.peers) return [result, renderDoctor];
+      const { doctorAcross } = await import('../peers/federate.mjs');
+      return [{ ...result, computers: await doctorAcross(await peersFor(flags.peers)) }, renderDoctor];
+    }
     case 'attachment':
       return [await recall.attachment(one('attachment id'), { out: flags.out, sync: flags['no-sync'] ? 'never' : 'auto' }), renderAttachment];
     case 'install': {
@@ -110,11 +163,12 @@ function emit(json, value, render) {
 
 export async function main(argv) {
   const [rawCommand = 'help', ...rest] = argv;
-  const json = rest.includes('--json');
+  const json = rest.includes('--json') || rawCommand === 'peer-request';
   if (['help', '--help', '-h'].includes(rawCommand)) return void process.stdout.write(`${HELP}\n`);
   if (['--version', '-v', 'version'].includes(rawCommand)) return void process.stdout.write(`${VERSION}\n`);
   const command = COMMAND_ALIASES[rawCommand] ?? rawCommand;
   try {
+    if (rawCommand === 'peer-request') return await answerPeer();
     if (!COMMANDS[command]) {
       const guess = closest(command, Object.keys(COMMANDS));
       throw new UsageError(`Unknown command "${rawCommand}".${guess ? ` Did you mean ${guess}?` : ''} Run: help`);

@@ -128,6 +128,19 @@ export const SYNC = Object.freeze({
   BATCH_SOURCES: 500,
 });
 
+// Other computers reached over SSH, listed in <data home>/peers.json (see references/peers.md).
+export const PEERS = Object.freeze({
+  FILE: 'peers.json',
+  // Commands a remote computer answers; everything else is refused there.
+  COMMANDS: Object.freeze(['search', 'read', 'show', 'recent', 'doctor']),
+  CONNECT_TIMEOUT_S: 8,
+  // A peer's first search may build its index; later ones take about a second.
+  TIMEOUT_MS: 180_000,
+  MAX_OUTPUT_BYTES: 64 * 1024 * 1024,
+  // Replaces the ssh program (a JSON array such as ["node", "fake-ssh.mjs"]); used by tests.
+  SSH_ENV: 'AGENT_RECALL_SSH',
+});
+
 export const RETENTION = Object.freeze({
   CLAUDE_DEFAULT_DAYS: 30,
   WARN_BELOW_DAYS: 90,

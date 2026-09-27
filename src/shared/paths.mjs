@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { APP } from './config.mjs';
+import { APP, PEERS } from './config.mjs';
 
 // AGENT_RECALL_SOURCE_HOME points every provider at a fake home; tests build real layouts there.
 function sourceHome() {
@@ -55,6 +55,10 @@ export function dataHome() {
   }
   if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', APP.NAME);
   return path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), APP.NAME);
+}
+
+export function peersPath() {
+  return path.join(dataHome(), PEERS.FILE);
 }
 
 export function databasePath() {

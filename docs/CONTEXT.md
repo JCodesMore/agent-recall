@@ -34,4 +34,8 @@ stores (desktop apps, Codex thread names) are **labels**, merged over what the t
 **Recall turn**: a turn in which the agent ran Agent Recall. Its passages are demoted so a chat
 asking for a conversation ranks below the conversation itself.
 
+**Peer**: another computer of the user's, listed in `peers.json` and reached over SSH. Each
+peer keeps its own index; results from it carry `peer` (`@name` in text). _Avoid_: host,
+remote, machine (except when quoting SSH).
+
 **Index**: the SQLite database under the data home. Derived state; `sync` rebuilds it.

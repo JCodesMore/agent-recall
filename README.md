@@ -81,7 +81,7 @@ In Claude Code you can also type `/agent-recall` followed by what you are lookin
 
 ## Private by default
 
-Everything stays on your computer. Agent Recall reads the history files your agents already
+Everything stays on your computers. Agent Recall reads the history files your agents already
 keep, builds a search index next to them, and never uploads anything. No account, API key or
 cloud service.
 
@@ -102,6 +102,16 @@ only new messages are read, so a search takes well under a second.
 
 Claude Code deletes transcripts after 30 days unless you change `cleanupPeriodDays` in
 `~/.claude/settings.json`. `doctor` warns you when that applies.
+
+</details>
+
+<details>
+<summary><b>More than one computer</b></summary>
+
+If you use agents on several computers, each one keeps its own index, and Agent Recall can
+ask the others over SSH: "find the chat on my laptop where we set up the VPN". List your
+computers once in a `peers.json` file ([setup guide](references/peers.md)); nothing is
+copied or uploaded, and each computer answers from its own history.
 
 </details>
 

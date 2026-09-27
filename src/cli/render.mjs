@@ -16,11 +16,21 @@ function ago(iso, now = Date.now()) {
   return date;
 }
 
+// How to name a session in a follow-up command, including the computer it lives on.
+const ref = session => `${session.handle}${session.peer ? ` --peer ${session.peer}` : ''}`;
+
+function computersLine(result) {
+  if (!result.computers) return [];
+  const parts = result.computers.map(computer => (computer.ok ? `${computer.name} ${computer.count}` : `${computer.name} failed (${terminalSafe(oneLine(computer.error, 120))})`));
+  return [`computers: ${parts.join(', ')}`];
+}
+
 function sessionLine(session) {
   const tags = [session.kind === 'subagent' && 'subagent', session.archived && 'archived', session.live && 'active now'].filter(Boolean);
   const where = session.project ?? (session.cwd ? displayPath(session.cwd) : null);
   const parts = [where, ago(session.updated), `${session.messages} msgs`, ...tags].filter(Boolean);
-  return `${terminalSafe(oneLine(session.title ?? '(untitled)', 100))}  [${session.provider} ${session.handle}]  ${parts.join(' · ')}`;
+  const computer = session.peer ? ` @${session.peer}` : '';
+  return `${terminalSafe(oneLine(session.title ?? '(untitled)', 100))}  [${session.provider} ${session.handle}${computer}]  ${parts.join(' · ')}`;
 }
 
 function warningsBlock(result) {
@@ -42,12 +52,13 @@ export function renderSearch(result) {
     }
     if (hit.missing.length) lines.push(`   not found here: ${hit.missing.join(', ')}`);
     const first = hit.matches[0];
-    lines.push(`   read ${first ? `${first.handle} --at ${first.seq}` : hit.handle}`);
+    lines.push(`   read ${first ? `${first.handle}${hit.peer ? ` --peer ${hit.peer}` : ''} --at ${first.seq}` : ref(hit)}`);
   });
   lines.push('');
   lines.push(count
     ? 'Next: read <handle> --at <#> opens a match in context; read <handle> pages the whole conversation.'
     : 'Next: try other words (a file name, command, error text or project name), or: recent --project <name>');
+  lines.push(...computersLine(result));
   lines.push(...warningsBlock(result));
   return lines.join('\n');
 }
@@ -71,10 +82,10 @@ export function renderRead(result) {
   }
   lines.push('');
   for (const message of result.messages) lines.push(formatMessage(message), '');
-  const handle = result.session.handle;
+  const handle = ref(result.session);
   if (result.grepNextFrom !== null && result.grepNextFrom !== undefined) lines.push(`-- more matches: read ${handle} --grep "..." --max-chars <larger>, or read ${handle} --from ${result.grepNextFrom} --`);
   else if (result.nextFrom !== null && result.nextFrom !== undefined) lines.push(`-- more: read ${handle} --from ${result.nextFrom} --`);
-  else if (result.continuesIn) lines.push(`-- continues in the next part: read ${result.continuesIn.handle} --`);
+  else if (result.continuesIn) lines.push(`-- continues in the next part: read ${ref(result.continuesIn)} --`);
   else if (!result.grepHits) lines.push('-- end of conversation --');
   if (result.prevFrom !== null && result.prevFrom !== undefined) lines.push(`-- earlier: read ${handle} --from ${result.prevFrom} --`);
   if (result.subagents?.length) {
@@ -110,14 +121,15 @@ export function renderShow(result) {
     lines.push('attachments:');
     for (const a of result.attachments) lines.push(`  ${a.id}  #${a.seq} ${a.mime} ${a.bytes} bytes${a.name ? ` ${a.name}` : ''}   (attachment ${a.id} --out <file>)`);
   }
-  lines.push('', `Next: read ${s.handle}`);
+  lines.push('', `Next: read ${ref(s)}`);
   lines.push(...warningsBlock(result));
   return lines.join('\n');
 }
 
 export function renderRecent(result) {
   const lines = result.sessions.length ? result.sessions.map((session, i) => `${i + 1}. ${sessionLine(session)}`) : ['No conversations found.'];
-  lines.push('', 'Next: read <handle>');
+  lines.push('', `Next: read <handle>${result.computers ? ' (add --peer NAME for another computer)' : ''}`);
+  lines.push(...computersLine(result));
   lines.push(...warningsBlock(result));
   return lines.join('\n');
 }
@@ -134,9 +146,13 @@ export function renderDoctor(result) {
   for (const [id, stats] of Object.entries(result.providers)) {
     lines.push(`${(PROVIDER_LABELS[id] ?? id).padEnd(12)} ${String(stats.roots ?? 0).padStart(6)} conversations, ${String(stats.sessions - (stats.roots ?? 0)).padStart(6)} subagents, ${String(stats.messages ?? 0).padStart(8)} messages${stats.newest ? `, newest ${ago(stats.newest)}` : ''}`);
   }
+  for (const computer of result.computers ?? []) {
+    if (!computer.ok) lines.push(`computer ${computer.name}: unreachable (${terminalSafe(oneLine(computer.error, 160))})`);
+    else lines.push(`computer ${computer.name}: Agent Recall ${computer.version} on Node ${computer.node}, ${Object.values(computer.providers ?? {}).reduce((sum, stats) => sum + (stats.roots ?? 0), 0)} conversations${computer.warnings.length ? `, ${computer.warnings.length} warning(s)` : ''}`);
+  }
   if (result.claudeRetentionDays) lines.push(`Claude transcript retention: ${result.claudeRetentionDays} days`);
   lines.push(...warningsBlock(result));
-  if (!result.warnings.length) lines.push('ok');
+  if (!result.warnings.length && (result.computers ?? []).every(computer => computer.ok)) lines.push('ok');
   return lines.join('\n');
 }
 
