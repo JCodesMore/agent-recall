@@ -1,6 +1,6 @@
 # Checkpoint
 
-Objective: v1 rewrite of Agent Recall on `rewrite/v1` (see docs/GOAL.md for done criteria).
+Objective: Agent Recall v1, merged to `main` and released as v1.0.0 (see docs/GOAL.md for done criteria).
 
 ## Decisions
 
@@ -40,17 +40,13 @@ Objective: v1 rewrite of Agent Recall on `rewrite/v1` (see docs/GOAL.md for done
   partial updates); low items closed (config constants, provider-owned refs, newest-first
   sync, `--until` end of day, export cycle guard, Claude origin).
 
-## Deployment (this user's machines)
+## Deployment
 
-- Installed from this branch into `~/.agents/skills/agent-recall` on TWELVE (2026-09-27). The
-  `JCodesMore/agent-skills` repo syncs `~/.agents` every 60 s to THIRTEEN and the MacBook, so
-  one install updates all three; Claude and Cursor reach it through links.
-- `peers.json` (same content, self-skipped by hostname) sits in each computer's data folder.
-  The old `recall-network.*` wrapper was retired; pc-link's SKILL.md now points at
-  `--peers all`. Orphaned plugin 0.5.0 and the v0 restore backup went to the Recycle Bin.
-- Verified live: search from TWELVE and from the MacBook across all three computers (~1 s),
-  `read --peer` with `--grep` on THIRTEEN (PowerShell), non-ASCII queries Mac -> Windows.
-- To update later: `node scripts/recall.mjs install` from a checkout on any one computer.
+- Released as v1.0.0 on 2026-11-12 (annotated tag on `main`).
+- The maintainer runs it on three computers (Windows and macOS) from
+  `~/.agents/skills/agent-recall`, with `--peers all` across them: a search over all three
+  takes about a second, and non-ASCII queries survive the trip between macOS and Windows.
+- To update an install: `node scripts/recall.mjs install` from a checkout.
 
 ## Next
 
