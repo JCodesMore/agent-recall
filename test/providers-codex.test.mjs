@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import zlib from 'node:zlib';
 import { codexProvider } from '../src/providers/codex.mjs';
 import { sourceRoots } from '../src/shared/paths.mjs';
 import { codex } from './helpers/codex.mjs';
@@ -99,6 +100,21 @@ test('event-form turns and images from both forms are read, and attachments re-r
   assert.deepEqual(parsed.attachments.map(a => [a.seq, a.ordinal, a.mime, a.bytes]), [[0, 0, 'image/png', 9], [2, 0, 'image/jpeg', 10]]);
   const bytes = await Promise.all(parsed.attachments.map(a => codexProvider.readAttachment(source, a.locator)));
   assert.deepEqual(bytes.map(b => [b.mime, b.data.toString()]), [['image/png', 'png-bytes'], ['image/jpeg', 'jpeg-bytes']]);
+});
+
+test('compressed rollouts are read like plain ones, attachments included', async () => {
+  home = fakeHome().activate();
+  const records = [codex.meta(ID), codex.userEvent('why does the docker build fail?', 1, [PNG]), codex.agentEvent('The lockfile came from a Mac.', 2)];
+  const relative = path.join('.codex', 'archived_sessions', `rollout-2026-01-05T10-00-00-${ID}.jsonl.zst`);
+  const file = home.file(relative, zlib.zstdCompressSync(Buffer.from(records.map(record => JSON.stringify(record)).join('\n') + '\n')));
+  const source = await sourceFor(file);
+
+  const parsed = await codexProvider.parse(source, null);
+
+  assert.deepEqual([parsed.sessions[0].nativeId, parsed.sessions[0].archived], [ID, true]);
+  assert.deepEqual(texts(parsed), ['why does the docker build fail?', 'The lockfile came from a Mac.']);
+  const image = await codexProvider.readAttachment(source, parsed.attachments[0].locator);
+  assert.deepEqual([image.mime, image.data.toString()], ['image/png', 'png-bytes']);
 });
 
 test('an appended rollout resumes from the cursor and continues the sequence', async () => {

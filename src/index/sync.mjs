@@ -5,7 +5,7 @@ import { SYNC } from '../shared/config.mjs';
 import { hashHex } from '../shared/ids.mjs';
 import { displayPath, ensureDataHome, sourceRoots } from '../shared/paths.mjs';
 import { providersFor } from '../providers/registry.mjs';
-import { readHead } from '../providers/jsonl.mjs';
+import { isCompressed, readHead } from '../providers/jsonl.mjs';
 import { statOrNull } from '../providers/fsutil.mjs';
 import { getMeta, openIndex, setMeta, transaction } from './db.mjs';
 import { createWriter } from './writer.mjs';
@@ -173,7 +173,8 @@ export async function syncIndex({ providers, full = false, budgetMs = Infinity, 
       const item = work[index];
       try {
         const cursor = parseCursor(item.row?.cursor);
-        item.append = !full && item.source.kind === 'jsonl' && Boolean(cursor?.state) && item.stat.size >= item.row.size
+        // A compressed file is rewritten whole rather than appended to, so it is read afresh.
+        item.append = !full && item.source.kind === 'jsonl' && !isCompressed(item.source.path) && Boolean(cursor?.state) && item.stat.size >= item.row.size
           && cursor.offset <= item.stat.size && await sameHead(item.source.path, item.row.head);
         if (item.source.kind === 'jsonl') item.stat.head = await headHash(item.source.path, Math.min(SYNC.HEAD_BYTES, item.stat.size));
         // Database sources take their cursor on every change and may answer with a partial update.
