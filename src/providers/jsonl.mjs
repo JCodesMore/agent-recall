@@ -1,8 +1,47 @@
+import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
+import { pipeline } from 'node:stream';
+import zlib from 'node:zlib';
 import { LIMITS } from '../shared/config.mjs';
 
 const NEWLINE = 0x0a;
 const CHUNK_BYTES = 1024 * 1024;
+
+// Codex compresses finished rollouts to .jsonl.zst. Node gained zstd in 22.15; without it
+// those files are left out rather than misread.
+export const ZSTD_SUPPORTED = typeof zlib.createZstdDecompress === 'function';
+export const isCompressed = file => file.endsWith('.zst');
+
+// Yields a file's decoded bytes from `offset`. Offsets count decoded bytes, so a cursor or
+// attachment locator means the same thing for plain and compressed files. A plain file's
+// chunk is reused between reads: consumers copy what they keep before asking for more.
+async function* bytesFrom(file, offset) {
+  if (isCompressed(file)) {
+    let skip = offset;
+    const decoded = pipeline(createReadStream(file), zlib.createZstdDecompress(), () => {});
+    for await (const piece of decoded) {
+      if (skip >= piece.length) {
+        skip -= piece.length;
+        continue;
+      }
+      yield skip ? piece.subarray(skip) : piece;
+      skip = 0;
+    }
+    return;
+  }
+  const handle = await fs.open(file, 'r');
+  try {
+    const chunk = Buffer.allocUnsafe(CHUNK_BYTES);
+    for (let position = offset; ;) {
+      const { bytesRead } = await handle.read(chunk, 0, CHUNK_BYTES, position);
+      if (bytesRead === 0) return;
+      position += bytesRead;
+      yield chunk.subarray(0, bytesRead);
+    }
+  } finally {
+    await handle.close();
+  }
+}
 
 export function emptyDiagnostics() {
   return { malformed: 0, oversized: 0, skipped: 0 };
@@ -34,8 +73,6 @@ function parseLine(buffer, diagnostics) {
  * parses, so a writer caught mid-line is re-read next time.
  */
 export async function scanJsonl(file, { offset = 0, line = 0, skip, onRecord, diagnostics = emptyDiagnostics() }) {
-  const handle = await fs.open(file, 'r');
-  let position = offset;
   let consumed = offset;
   let lineNumber = line;
   let pending = [];
@@ -51,84 +88,65 @@ export async function scanJsonl(file, { offset = 0, line = 0, skip, onRecord, di
     if (record) await onRecord(record, { line: lineNumber, offset: lineStart });
   };
 
-  try {
-    const chunk = Buffer.allocUnsafe(CHUNK_BYTES);
-    for (;;) {
-      const { bytesRead } = await handle.read(chunk, 0, CHUNK_BYTES, position);
-      if (bytesRead === 0) break;
-      const data = chunk.subarray(0, bytesRead);
-      let start = 0;
-      for (let index = data.indexOf(NEWLINE, start); index !== -1; index = data.indexOf(NEWLINE, start)) {
-        const lineStart = consumed;
-        const piece = data.subarray(start, index);
-        const lineBytes = pendingBytes + piece.length;
-        consumed += lineBytes + 1;
-        if (dropping) {
-          dropping = false;
-          lineNumber += 1;
-        } else {
-          // A view into `chunk` is safe: it is parsed before the next read overwrites it.
-          const buffer = pending.length ? Buffer.concat([...pending, piece], lineBytes) : piece;
-          await finishLine(buffer, lineStart);
-        }
-        pending = [];
-        pendingBytes = 0;
-        start = index + 1;
-      }
-      const rest = data.subarray(start);
-      if (rest.length) {
-        if (dropping) {
-          pendingBytes += rest.length;
-        } else if (pendingBytes + rest.length > LIMITS.JSONL_MAX_LINE_BYTES) {
-          dropping = true;
-          diagnostics.oversized += 1;
-          pending = [];
-          pendingBytes += rest.length;
-        } else {
-          pending.push(Buffer.from(rest));
-          pendingBytes += rest.length;
-        }
-      }
-      position += bytesRead;
-    }
-    if (!dropping && pendingBytes) {
-      const buffer = Buffer.concat(pending, pendingBytes);
-      const probe = emptyDiagnostics();
-      const record = parseLine(buffer, probe);
-      if (record) {
-        const lineStart = consumed;
-        consumed += pendingBytes;
+  for await (const data of bytesFrom(file, offset)) {
+    let start = 0;
+    for (let index = data.indexOf(NEWLINE, start); index !== -1; index = data.indexOf(NEWLINE, start)) {
+      const lineStart = consumed;
+      const piece = data.subarray(start, index);
+      const lineBytes = pendingBytes + piece.length;
+      consumed += lineBytes + 1;
+      if (dropping) {
+        dropping = false;
         lineNumber += 1;
-        await onRecord(record, { line: lineNumber, offset: lineStart });
+      } else {
+        // A view into the chunk is safe: it is parsed before the next read overwrites it.
+        const buffer = pending.length ? Buffer.concat([...pending, piece], lineBytes) : piece;
+        await finishLine(buffer, lineStart);
+      }
+      pending = [];
+      pendingBytes = 0;
+      start = index + 1;
+    }
+    const rest = data.subarray(start);
+    if (rest.length) {
+      if (dropping) {
+        pendingBytes += rest.length;
+      } else if (pendingBytes + rest.length > LIMITS.JSONL_MAX_LINE_BYTES) {
+        dropping = true;
+        diagnostics.oversized += 1;
+        pending = [];
+        pendingBytes += rest.length;
+      } else {
+        pending.push(Buffer.from(rest));
+        pendingBytes += rest.length;
       }
     }
-  } finally {
-    await handle.close();
+  }
+  if (!dropping && pendingBytes) {
+    const buffer = Buffer.concat(pending, pendingBytes);
+    const probe = emptyDiagnostics();
+    const record = parseLine(buffer, probe);
+    if (record) {
+      const lineStart = consumed;
+      consumed += pendingBytes;
+      lineNumber += 1;
+      await onRecord(record, { line: lineNumber, offset: lineStart });
+    }
   }
   return { offset: consumed, line: lineNumber, diagnostics };
 }
 
 // Reads the single record that starts at a byte offset (attachment retrieval).
 export async function readJsonlAt(file, offset) {
-  const handle = await fs.open(file, 'r');
-  try {
-    const parts = [];
-    let position = offset;
-    const chunk = Buffer.allocUnsafe(CHUNK_BYTES);
-    for (let total = 0; total <= LIMITS.JSONL_MAX_LINE_BYTES;) {
-      const { bytesRead } = await handle.read(chunk, 0, CHUNK_BYTES, position);
-      if (bytesRead === 0) break;
-      const data = chunk.subarray(0, bytesRead);
-      const end = data.indexOf(NEWLINE);
-      parts.push(Buffer.from(end === -1 ? data : data.subarray(0, end)));
-      if (end !== -1) break;
-      position += bytesRead;
-      total += bytesRead;
-    }
-    return parseLine(Buffer.concat(parts), emptyDiagnostics());
-  } finally {
-    await handle.close();
+  const parts = [];
+  let total = 0;
+  for await (const data of bytesFrom(file, offset)) {
+    const end = data.indexOf(NEWLINE);
+    parts.push(Buffer.from(end === -1 ? data : data.subarray(0, end)));
+    total += data.length;
+    if (end !== -1 || total > LIMITS.JSONL_MAX_LINE_BYTES) break;
   }
+  return parseLine(Buffer.concat(parts), emptyDiagnostics());
 }
 
 export async function readHead(file, bytes) {

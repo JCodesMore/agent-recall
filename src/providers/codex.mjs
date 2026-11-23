@@ -7,15 +7,15 @@ import { asIso } from '../shared/ids.mjs';
 import { oneLine, stripTags } from '../shared/text.mjs';
 import { parseJsonlSource, pushAttachment, pushMessage, sessionState, touch } from './builder.mjs';
 import { cleanUserText } from './claude.mjs';
-import { readJsonlAt } from './jsonl.mjs';
+import { readJsonlAt, ZSTD_SUPPORTED } from './jsonl.mjs';
 import { listDir } from './fsutil.mjs';
 import { outputExcerpt, toolSummary } from './tools.mjs';
 
 const PROVIDER = PROVIDERS.CODEX;
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-// rollout-<stamp>-<thread id>[_<segment id>].jsonl: a long thread continues in segment files.
-const ROLLOUT_NAME = new RegExp(`^rollout-.*?(${UUID})(?:_(${UUID}))?\\.jsonl$`, 'i');
+// rollout-<stamp>-<thread id>[_<segment id>].jsonl[.zst]: segments continue long threads; .zst is compressed.
+const ROLLOUT_NAME = new RegExp(`^rollout-.*?(${UUID})(?:_(${UUID}))?\\.jsonl(\\.zst)?$`, 'i');
 const STATE_DB = /^state_(\d+)\.sqlite$/;
 
 // Large records never read: compaction snapshots (half of all bytes), world state, reasoning,
@@ -201,7 +201,7 @@ function handleMeta(state, payload) {
 const parser = {
   init(source) {
     const match = path.basename(source.path).match(ROLLOUT_NAME);
-    const threadId = match?.[1] ?? path.basename(source.path, '.jsonl');
+    const threadId = match?.[1] ?? path.basename(source.path).replace(/\.jsonl(\.zst)?$/i, '');
     const segment = match?.[2] ?? null;
     return sessionState({
       provider: PROVIDER,
@@ -284,7 +284,8 @@ async function rollouts(dir, meta) {
   const nested = await Promise.all(entries.map(async entry => {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) return rollouts(full, meta);
-    return entry.isFile() && ROLLOUT_NAME.test(entry.name) ? [{ provider: PROVIDER, path: full, kind: 'jsonl', meta: { ...meta } }] : [];
+    const match = entry.isFile() ? entry.name.match(ROLLOUT_NAME) : null;
+    return match && (!match[3] || ZSTD_SUPPORTED) ? [{ provider: PROVIDER, path: full, kind: 'jsonl', meta: { ...meta } }] : [];
   }));
   return nested.flat();
 }
